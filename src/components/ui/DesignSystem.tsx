@@ -1,6 +1,6 @@
 import React from 'react';
-import { X, CheckCircle2, AlertTriangle, Info, AlertCircle, Download, Inbox, WifiOff } from 'lucide-react';
-import { ToastMessage } from '../../types';
+import { X, CheckCircle2, AlertTriangle, Info, AlertCircle, Download, Inbox, WifiOff, ArrowUpRight, ArrowDownRight, Minus } from 'lucide-react';
+import { PublishedEprRate, ToastMessage } from '../../types';
 
 export const formatINR = (val: number) =>
   new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(val);
@@ -17,10 +17,71 @@ export const LogoMark: React.FC<{ dark?: boolean; onClick?: () => void }> = ({ d
     <img
       src="/assets/aistudio/epr_bazaar_logo__9ac2c6f9.jpeg"
       alt="EPR Bazaar — One Stop for EPR Solutions"
-      className={`${dark ? 'h-8' : 'h-10 sm:h-11'} w-auto object-contain rounded`}
+      className={`${dark ? 'h-8' : 'h-9 sm:h-10'} w-auto object-contain rounded`}
     />
   </button>
 );
+
+export const EprRateTickerBar: React.FC<{
+  rates: PublishedEprRate[];
+  onRateClick?: (rate: PublishedEprRate) => void;
+}> = ({ rates, onRateClick }) => {
+  const activeRates = rates
+    .filter((r) => r.published)
+    .sort((a, b) => a.categoryName.localeCompare(b.categoryName));
+
+  return (
+    <div
+      className="bg-[#0A172A] text-white border-b border-[#1E293B] h-7 sm:h-8 flex items-center overflow-hidden"
+      aria-label="Published EPR Credit Reference Rates"
+    >
+      <div className="max-w-[1440px] w-full mx-auto px-3 sm:px-6 lg:px-8 flex items-center gap-3 sm:gap-4 min-w-0">
+        <span className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-[0.08em] text-[#94A3B8] whitespace-nowrap shrink-0 border-r border-white/15 pr-3">
+          EPR Rates
+        </span>
+
+        {activeRates.length === 0 ? (
+          <div className="text-[11px] sm:text-xs text-[#CBD5E1] truncate">
+            Official category reference rates are published by the EPR Bazaar desk.
+          </div>
+        ) : (
+          <div className="flex-1 overflow-hidden min-w-0">
+            <div className="animate-ticker gap-6 sm:gap-8 items-center text-[11px] sm:text-xs font-mono tabular-nums">
+              {[...activeRates, ...activeRates].map((r, idx) => {
+                const TrendIcon =
+                  r.trend === 'Up' ? ArrowUpRight : r.trend === 'Down' ? ArrowDownRight : Minus;
+                const trendColor =
+                  r.trend === 'Up'
+                    ? 'text-[#4ADE80]'
+                    : r.trend === 'Down'
+                    ? 'text-[#FDA4AF]'
+                    : 'text-[#94A3B8]';
+                return (
+                  <button
+                    key={`${r.id}-${idx}`}
+                    type="button"
+                    onClick={() => onRateClick?.(r)}
+                    className="inline-flex items-center gap-2 whitespace-nowrap text-left hover:text-white transition-colors cursor-pointer focus:outline-none focus-visible:underline"
+                  >
+                    <span className="font-sans font-medium text-[#E2E8F0]">{r.categoryName}</span>
+                    <span className="text-[#94A3B8] text-[10px] hidden sm:inline">({r.financialYear})</span>
+                    <span className="font-semibold text-white">
+                      {formatINR(r.rate)}/{r.unit}
+                    </span>
+                    <TrendIcon className={`w-3 h-3 ${trendColor}`} aria-hidden="true" />
+                    <span className="text-white/20 pl-2" aria-hidden="true">
+                      /
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
 
 export const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
   const normalized = status.toLowerCase();
@@ -331,7 +392,7 @@ export const SimpleBarChart: React.FC<{
   if (data.length === 0) {
     return (
       <div className="text-xs text-[#64748B] py-6 text-center">
-        No database records available for this chart yet.
+        No transaction activity recorded for this chart yet.
       </div>
     );
   }

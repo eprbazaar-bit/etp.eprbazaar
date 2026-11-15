@@ -489,6 +489,26 @@
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["id", "defaultBrokeragePercent", "gstPercent", "matchingRateTolerancePercent", "updatedAt"]
+    },
+    "PublishedEprRate": {
+      "title": "PublishedEprRate",
+      "description": "Admin-approved EPR category rate displayed in the website header ticker and rate board.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 100, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "categoryId": { "type": "string", "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "categoryName": { "type": "string", "minLength": 2, "maxLength": 100 },
+        "financialYear": { "type": "string", "minLength": 4, "maxLength": 20 },
+        "unit": { "type": "string", "enum": ["MT", "KL", "Units"] },
+        "rate": { "type": "number" },
+        "trend": { "type": "string", "enum": ["Up", "Down", "Stable"] },
+        "published": { "type": "boolean" },
+        "notes": { "type": "string", "maxLength": 300 },
+        "updatedByUid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "categoryId", "categoryName", "financialYear", "unit", "rate", "published", "updatedByUid", "createdAt", "updatedAt"]
     }
   },
   "firestore": {
@@ -512,6 +532,7 @@
     "/notifications/{notificationId}": { "schema": { "$ref": "#/entities/Notification" }, "description": "User notifications." },
     "/email_delivery_logs/{logId}": { "schema": { "$ref": "#/entities/EmailDeliveryLog" }, "description": "Staff-only transactional email delivery logs & retries." },
     "/market_rates/{rateId}": { "schema": { "$ref": "#/entities/MarketRate" }, "description": "Real-time market rate summaries." },
+    "/published_rates/{rateId}": { "schema": { "$ref": "#/entities/PublishedEprRate" }, "description": "Admin-approved published EPR category rates for ticker and rate board." },
     "/transactions/{transactionId}": { "schema": { "$ref": "#/entities/TransactionRecord" }, "description": "Completed transactions for Last Traded Rate." },
     "/audit_logs/{logId}": { "schema": { "$ref": "#/entities/AuditLog" }, "description": "Security and operations audit log." },
     "/platform_settings/{settingId}": { "schema": { "$ref": "#/entities/PlatformSettings" }, "description": "Global platform configuration." }

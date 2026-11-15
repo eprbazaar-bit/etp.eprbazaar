@@ -23,7 +23,7 @@ const AppRouter: React.FC = () => {
     return (
       <div className="min-h-screen bg-[#F4F7FB] flex flex-col items-center justify-center p-6 gap-4">
         <LogoMark />
-        <div className="text-xs font-medium text-[#64748B]">Verifying session and connecting to Firebase...</div>
+        <div className="text-xs font-medium text-[#64748B]">Verifying your session...</div>
       </div>
     );
   }
@@ -32,7 +32,7 @@ const AppRouter: React.FC = () => {
     return (
       <div className="min-h-screen bg-[#F4F7FB]">
         <div className="max-w-3xl mx-auto px-4 pt-6">
-          <ErrorAlertBanner title="Firebase Connection Required" message={connectionError} />
+          <ErrorAlertBanner title="Service Connection Required" message={connectionError} />
         </div>
         <PublicWebsite />
         <ToastContainer toasts={toasts} onDismiss={dismissToast} />

@@ -39,7 +39,7 @@ const isConfigValid =
 export const firebaseConfigured = isConfigValid;
 export const firebaseConfigError = isConfigValid
   ? null
-  : 'Firebase is not configured. Missing valid projectId, apiKey, or firestoreDatabaseId in firebase-applet-config.json.';
+  : 'Trading platform service connection is currently unavailable. Please contact support.';
 
 let app: FirebaseApp | null = null;
 let dbInstance: Firestore | null = null;
@@ -84,7 +84,7 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
 
 export async function testFirestoreConnection(): Promise<{ ok: boolean; error?: string }> {
   if (!isConfigValid || !dbInstance) {
-    return { ok: false, error: firebaseConfigError || 'Firebase not configured' };
+    return { ok: false, error: firebaseConfigError || 'Platform service unavailable' };
   }
   try {
     await getDocFromServer(doc(dbInstance, 'platform_settings', 'connection_check'));
@@ -92,9 +92,9 @@ export async function testFirestoreConnection(): Promise<{ ok: boolean; error?: 
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
     if (msg.includes('the client is offline') || msg.includes('Failed to get document because the client is offline')) {
-      return { ok: false, error: 'Unable to reach Cloud Firestore (network offline or invalid Firebase configuration).' };
+      return { ok: false, error: 'Unable to connect to the trading platform. Please check your internet connection and refresh.' };
     }
-    // Permission errors or missing doc still confirm server reachability
+    // Permission errors or missing doc still confirm reachability
     return { ok: true };
   }
 }

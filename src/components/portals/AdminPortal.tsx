@@ -33,6 +33,7 @@ import {
   ConfirmModal,
   CsvExportButton,
   EmptyState,
+  EprRateTickerBar,
   formatINR,
   MetricCard,
   Modal,
@@ -40,7 +41,7 @@ import {
   StatusBadge,
 } from '../ui/DesignSystem';
 import { DocumentsView, NotificationsView, PaymentsView } from './SharedPortalViews';
-import { AdminTab, BuyerRequirement, EPRCategory, EmailDeliveryLog, SellerListing, formatTime } from '../../types';
+import { AdminTab, BuyerRequirement, EPRCategory, EmailDeliveryLog, PublishedEprRate, SellerListing, formatTime } from '../../types';
 
 export const AdminPortal: React.FC = () => {
   const {
@@ -50,6 +51,7 @@ export const AdminPortal: React.FC = () => {
     categories,
     subcategories,
     marketRates,
+    publishedRates,
     transactions,
     buyers,
     sellers,
@@ -70,6 +72,9 @@ export const AdminPortal: React.FC = () => {
     adminVerifyUser,
     adminSaveCategory,
     adminToggleCategory,
+    adminSavePublishedRate,
+    adminTogglePublishedRate,
+    adminDeletePublishedRate,
     adminCreateStaffRecord,
     adminSavePlatformSettings,
     recordPayment,
@@ -118,6 +123,46 @@ export const AdminPortal: React.FC = () => {
   const [savingSettings, setSavingSettings] = useState(false);
   const [emailLogFilter, setEmailLogFilter] = useState<'ALL' | 'sent' | 'failed' | 'pending'>('ALL');
   const [retryingEmails, setRetryingEmails] = useState(false);
+
+  const [rateModalOpen, setRateModalOpen] = useState(false);
+  const [editRateItem, setEditRateItem] = useState<PublishedEprRate | null>(null);
+  const [rateCatId, setRateCatId] = useState('');
+  const [rateCustomName, setRateCustomName] = useState('');
+  const [rateUnit, setRateUnit] = useState<'MT' | 'KL' | 'Units'>('MT');
+  const [rateFy, setRateFy] = useState('FY 2025-26');
+  const [rateValue, setRateValue] = useState('');
+  const [rateTrend, setRateTrend] = useState<'Up' | 'Down' | 'Stable'>('Stable');
+  const [rateNotes, setRateNotes] = useState('');
+  const [ratePublished, setRatePublished] = useState(true);
+  const [savingRate, setSavingRate] = useState(false);
+  const [deleteRateConfirm, setDeleteRateConfirm] = useState<PublishedEprRate | null>(null);
+
+  const openRateEditor = (existing?: PublishedEprRate) => {
+    if (existing) {
+      setEditRateItem(existing);
+      const matchedCat = categories.find((c) => c.id === existing.categoryId);
+      setRateCatId(matchedCat ? matchedCat.id : 'CUSTOM');
+      setRateCustomName(existing.categoryName);
+      setRateUnit(existing.unit);
+      setRateFy(existing.financialYear);
+      setRateValue(String(existing.rate));
+      setRateTrend(existing.trend || 'Stable');
+      setRateNotes(existing.notes || '');
+      setRatePublished(existing.published);
+    } else {
+      const firstCat = categories[0];
+      setEditRateItem(null);
+      setRateCatId(firstCat ? firstCat.id : 'CUSTOM');
+      setRateCustomName(firstCat ? firstCat.name : '');
+      setRateUnit(firstCat ? firstCat.unit : 'MT');
+      setRateFy('FY 2025-26');
+      setRateValue('');
+      setRateTrend('Stable');
+      setRateNotes('');
+      setRatePublished(true);
+    }
+    setRateModalOpen(true);
+  };
 
   useEffect(() => {
     setBrokeragePct(String(platformSettings.defaultBrokeragePercent));
@@ -201,12 +246,12 @@ export const AdminPortal: React.FC = () => {
     switch (reportType) {
       case 'Buyer-wise':
         return {
-          headers: ['UID', 'Company', 'Contact', 'Mobile', 'Email', 'GSTIN', 'Verification', 'Status'],
+          headers: ['Account ID', 'Company', 'Contact', 'Mobile', 'Email', 'GSTIN', 'Verification', 'Status'],
           rows: buyers.map((b) => [b.uid, b.companyName, b.contactPerson, b.mobile, b.email, b.gstin, b.verification, b.status]),
         };
       case 'Seller-wise':
         return {
-          headers: ['UID', 'Company', 'Type', 'Mobile', 'Email', 'GSTIN', 'Verification', 'Status'],
+          headers: ['Account ID', 'Company', 'Type', 'Mobile', 'Email', 'GSTIN', 'Verification', 'Status'],
           rows: sellers.map((s) => [s.uid, s.companyName, s.recyclerType, s.mobile, s.email, s.gstin, s.verification, s.status]),
         };
       case 'Category-wise':
@@ -271,7 +316,7 @@ export const AdminPortal: React.FC = () => {
       portalTitle="Super Admin Portal"
       userTitle={currentAdmin?.name || 'Platform Administrator'}
       userSubtitle={
-        currentAdmin ? `${currentAdmin.roleTitle} · ${currentAdmin.email}` : 'Admin Console'
+        currentAdmin ? `${currentAdmin.roleTitle} · ${currentAdmin.email}` : 'Administrator Portal'
       }
       navItems={navItems}
       activeTab={adminTab}
@@ -284,7 +329,7 @@ export const AdminPortal: React.FC = () => {
             <div>
               <h1 className="font-display text-2xl font-bold text-[#0A172A]">Marketplace Control Tower</h1>
               <p className="text-xs text-[#64748B]">
-                Live Firestore governance across users, approvals, inventory, matching, and revenue.
+                Centralized governance across participants, approvals, inventory, matching, and revenue.
               </p>
             </div>
             <Button variant="primary" size="sm" onClick={() => setAdminTab('reports')}>
@@ -349,7 +394,7 @@ export const AdminPortal: React.FC = () => {
                 <h2 className="font-display text-sm font-semibold text-[#0A172A]">
                   Category-Wise Available Inventory
                 </h2>
-                <span className="font-mono text-[11px] text-[#64748B]">Live Firestore</span>
+                <span className="font-mono text-[11px] text-[#64748B]">Live Inventory</span>
               </div>
               <SimpleBarChart
                 data={categories
@@ -382,50 +427,52 @@ export const AdminPortal: React.FC = () => {
             />
           ) : (
             <div className="bg-white border border-[#E2E8F0] rounded-lg overflow-hidden">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="bg-[#F8FAFC] border-b border-[#E2E8F0] text-[11px] font-semibold uppercase tracking-wider text-[#64748B]">
-                    <th className="py-3 px-4">Company</th>
-                    <th className="py-3 px-4">Mobile / Email</th>
-                    <th className="py-3 px-4">GSTIN</th>
-                    <th className="py-3 px-4">Registered</th>
-                    <th className="py-3 px-4">Verification</th>
-                    <th className="py-3 px-4 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#F1F5F9] text-xs">
-                  {buyers.map((b) => (
-                    <tr key={b.uid} className="hover:bg-[#F8FAFC]">
-                      <td className="py-3 px-4 font-medium text-[#0A172A]">{b.companyName}</td>
-                      <td className="py-3 px-4 font-mono text-[#475569]">
-                        <div>{b.mobile}</div>
-                        <div>{b.email}</div>
-                      </td>
-                      <td className="py-3 px-4 font-mono">{b.gstin}</td>
-                      <td className="py-3 px-4 font-mono">{formatTime(b.createdAt)}</td>
-                      <td className="py-3 px-4">
-                        <StatusBadge status={b.verification} />
-                      </td>
-                      <td className="py-3 px-4 text-right space-x-1 whitespace-nowrap">
-                        <Button
-                          variant="emerald"
-                          size="sm"
-                          onClick={() => void adminVerifyUser('buyer', b.uid, 'Verified')}
-                        >
-                          Verify
-                        </Button>
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          onClick={() => void adminVerifyUser('buyer', b.uid, 'Action Required')}
-                        >
-                          Flag
-                        </Button>
-                      </td>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-[#F8FAFC] border-b border-[#E2E8F0] text-[11px] font-semibold uppercase tracking-wider text-[#64748B]">
+                      <th className="py-3 px-4">Company</th>
+                      <th className="py-3 px-4">Mobile / Email</th>
+                      <th className="py-3 px-4">GSTIN</th>
+                      <th className="py-3 px-4">Registered</th>
+                      <th className="py-3 px-4">Verification</th>
+                      <th className="py-3 px-4 text-right">Actions</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-[#F1F5F9] text-xs">
+                    {buyers.map((b) => (
+                      <tr key={b.uid} className="hover:bg-[#F8FAFC]">
+                        <td className="py-3 px-4 font-medium text-[#0A172A]">{b.companyName}</td>
+                        <td className="py-3 px-4 font-mono text-[#475569]">
+                          <div>{b.mobile}</div>
+                          <div>{b.email}</div>
+                        </td>
+                        <td className="py-3 px-4 font-mono">{b.gstin}</td>
+                        <td className="py-3 px-4 font-mono">{formatTime(b.createdAt)}</td>
+                        <td className="py-3 px-4">
+                          <StatusBadge status={b.verification} />
+                        </td>
+                        <td className="py-3 px-4 text-right space-x-1 whitespace-nowrap">
+                          <Button
+                            variant="emerald"
+                            size="sm"
+                            onClick={() => void adminVerifyUser('buyer', b.uid, 'Verified')}
+                          >
+                            Verify
+                          </Button>
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => void adminVerifyUser('buyer', b.uid, 'Action Required')}
+                          >
+                            Flag
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </div>
@@ -441,50 +488,52 @@ export const AdminPortal: React.FC = () => {
             />
           ) : (
             <div className="bg-white border border-[#E2E8F0] rounded-lg overflow-hidden">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="bg-[#F8FAFC] border-b border-[#E2E8F0] text-[11px] font-semibold uppercase tracking-wider text-[#64748B]">
-                    <th className="py-3 px-4">Company</th>
-                    <th className="py-3 px-4">Mobile / Email</th>
-                    <th className="py-3 px-4">GSTIN</th>
-                    <th className="py-3 px-4">Registered</th>
-                    <th className="py-3 px-4">Verification</th>
-                    <th className="py-3 px-4 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#F1F5F9] text-xs">
-                  {sellers.map((s) => (
-                    <tr key={s.uid} className="hover:bg-[#F8FAFC]">
-                      <td className="py-3 px-4 font-medium text-[#0A172A]">{s.companyName}</td>
-                      <td className="py-3 px-4 font-mono text-[#475569]">
-                        <div>{s.mobile}</div>
-                        <div>{s.email}</div>
-                      </td>
-                      <td className="py-3 px-4 font-mono">{s.gstin}</td>
-                      <td className="py-3 px-4 font-mono">{formatTime(s.createdAt)}</td>
-                      <td className="py-3 px-4">
-                        <StatusBadge status={s.verification} />
-                      </td>
-                      <td className="py-3 px-4 text-right space-x-1 whitespace-nowrap">
-                        <Button
-                          variant="emerald"
-                          size="sm"
-                          onClick={() => void adminVerifyUser('seller', s.uid, 'Verified')}
-                        >
-                          Verify
-                        </Button>
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          onClick={() => void adminVerifyUser('seller', s.uid, 'Action Required')}
-                        >
-                          Flag
-                        </Button>
-                      </td>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-[#F8FAFC] border-b border-[#E2E8F0] text-[11px] font-semibold uppercase tracking-wider text-[#64748B]">
+                      <th className="py-3 px-4">Company</th>
+                      <th className="py-3 px-4">Mobile / Email</th>
+                      <th className="py-3 px-4">GSTIN</th>
+                      <th className="py-3 px-4">Registered</th>
+                      <th className="py-3 px-4">Verification</th>
+                      <th className="py-3 px-4 text-right">Actions</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-[#F1F5F9] text-xs">
+                    {sellers.map((s) => (
+                      <tr key={s.uid} className="hover:bg-[#F8FAFC]">
+                        <td className="py-3 px-4 font-medium text-[#0A172A]">{s.companyName}</td>
+                        <td className="py-3 px-4 font-mono text-[#475569]">
+                          <div>{s.mobile}</div>
+                          <div>{s.email}</div>
+                        </td>
+                        <td className="py-3 px-4 font-mono">{s.gstin}</td>
+                        <td className="py-3 px-4 font-mono">{formatTime(s.createdAt)}</td>
+                        <td className="py-3 px-4">
+                          <StatusBadge status={s.verification} />
+                        </td>
+                        <td className="py-3 px-4 text-right space-x-1 whitespace-nowrap">
+                          <Button
+                            variant="emerald"
+                            size="sm"
+                            onClick={() => void adminVerifyUser('seller', s.uid, 'Verified')}
+                          >
+                            Verify
+                          </Button>
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => void adminVerifyUser('seller', s.uid, 'Action Required')}
+                          >
+                            Flag
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </div>
@@ -492,11 +541,11 @@ export const AdminPortal: React.FC = () => {
 
       {adminTab === 'facilitators' && (
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h1 className="font-display text-xl font-bold text-[#0A172A]">Facilitator Staff Management</h1>
               <p className="text-xs text-[#64748B]">
-                Only authorised @eprbazaar.com Firebase Auth UIDs provisioned here can access the Facilitator portal.
+                Only authorised @eprbazaar.com staff accounts provisioned here can access the Facilitator portal.
               </p>
             </div>
             <Button
@@ -516,34 +565,36 @@ export const AdminPortal: React.FC = () => {
           {facilitators.length === 0 ? (
             <EmptyState
               title="No facilitators provisioned yet."
-              description="Create an @eprbazaar.com user in Firebase Authentication and link their UID here."
+              description="Provision an authorised @eprbazaar.com staff account above to enable Facilitator access."
             />
           ) : (
             <div className="bg-white border border-[#E2E8F0] rounded-lg overflow-hidden">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="bg-[#F8FAFC] border-b border-[#E2E8F0] text-[11px] font-semibold uppercase tracking-wider text-[#64748B]">
-                    <th className="py-3 px-4">Employee ID</th>
-                    <th className="py-3 px-4">Name</th>
-                    <th className="py-3 px-4">Company Email</th>
-                    <th className="py-3 px-4">Department</th>
-                    <th className="py-3 px-4">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#F1F5F9] text-sm">
-                  {facilitators.map((f) => (
-                    <tr key={f.uid} className="hover:bg-[#F8FAFC]">
-                      <td className="py-3 px-4 font-mono text-xs font-semibold">{f.employeeId}</td>
-                      <td className="py-3 px-4 font-medium">{f.name}</td>
-                      <td className="py-3 px-4 font-mono text-xs">{f.email}</td>
-                      <td className="py-3 px-4 text-xs">{f.department || 'Trading Desk'}</td>
-                      <td className="py-3 px-4">
-                        <StatusBadge status={f.status} />
-                      </td>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-[#F8FAFC] border-b border-[#E2E8F0] text-[11px] font-semibold uppercase tracking-wider text-[#64748B]">
+                      <th className="py-3 px-4">Employee ID</th>
+                      <th className="py-3 px-4">Name</th>
+                      <th className="py-3 px-4">Company Email</th>
+                      <th className="py-3 px-4">Department</th>
+                      <th className="py-3 px-4">Status</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-[#F1F5F9] text-sm">
+                    {facilitators.map((f) => (
+                      <tr key={f.uid} className="hover:bg-[#F8FAFC]">
+                        <td className="py-3 px-4 font-mono text-xs font-semibold">{f.employeeId}</td>
+                        <td className="py-3 px-4 font-medium">{f.name}</td>
+                        <td className="py-3 px-4 font-mono text-xs">{f.email}</td>
+                        <td className="py-3 px-4 text-xs">{f.department || 'Trading Desk'}</td>
+                        <td className="py-3 px-4">
+                          <StatusBadge status={f.status} />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </div>
@@ -551,7 +602,7 @@ export const AdminPortal: React.FC = () => {
 
       {adminTab === 'admin-users' && (
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <h1 className="font-display text-xl font-bold text-[#0A172A]">Admin User Management</h1>
             <Button
               variant="primary"
@@ -569,35 +620,37 @@ export const AdminPortal: React.FC = () => {
           </div>
           {admins.length === 0 ? (
             <EmptyState
-              title="No additional admin records in Firestore."
-              description="The primary platform administrator is active via verified email; add co-admins here."
+              title="No additional administrator accounts configured."
+              description="The primary platform administrator is active via verified email; add co-administrators here."
             />
           ) : (
             <div className="bg-white border border-[#E2E8F0] rounded-lg overflow-hidden">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="bg-[#F8FAFC] border-b border-[#E2E8F0] text-[11px] font-semibold uppercase tracking-wider text-[#64748B]">
-                    <th className="py-3 px-4">UID</th>
-                    <th className="py-3 px-4">Name</th>
-                    <th className="py-3 px-4">Email</th>
-                    <th className="py-3 px-4">Title</th>
-                    <th className="py-3 px-4">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#F1F5F9] text-xs">
-                  {admins.map((a) => (
-                    <tr key={a.uid} className="hover:bg-[#F8FAFC]">
-                      <td className="py-3 px-4 font-mono font-semibold">{a.uid}</td>
-                      <td className="py-3 px-4 font-medium text-[#0A172A]">{a.name}</td>
-                      <td className="py-3 px-4 font-mono">{a.email}</td>
-                      <td className="py-3 px-4 text-[#475569]">{a.roleTitle}</td>
-                      <td className="py-3 px-4">
-                        <StatusBadge status={a.status} />
-                      </td>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-[#F8FAFC] border-b border-[#E2E8F0] text-[11px] font-semibold uppercase tracking-wider text-[#64748B]">
+                      <th className="py-3 px-4">Staff Account ID</th>
+                      <th className="py-3 px-4">Name</th>
+                      <th className="py-3 px-4">Email</th>
+                      <th className="py-3 px-4">Title</th>
+                      <th className="py-3 px-4">Status</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-[#F1F5F9] text-xs">
+                    {admins.map((a) => (
+                      <tr key={a.uid} className="hover:bg-[#F8FAFC]">
+                        <td className="py-3 px-4 font-mono font-semibold">{a.uid}</td>
+                        <td className="py-3 px-4 font-medium text-[#0A172A]">{a.name}</td>
+                        <td className="py-3 px-4 font-mono">{a.email}</td>
+                        <td className="py-3 px-4 text-[#475569]">{a.roleTitle}</td>
+                        <td className="py-3 px-4">
+                          <StatusBadge status={a.status} />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </div>
@@ -911,54 +964,330 @@ export const AdminPortal: React.FC = () => {
         </div>
       )}
 
-      {(adminTab === 'inventory' || adminTab === 'rate-board') && (
-        <div className="space-y-4">
-          <h1 className="font-display text-xl font-bold text-[#0A172A]">
-            {adminTab === 'rate-board' ? 'Live Market Rate Board' : 'Marketplace Inventory'}
-          </h1>
-          {marketRates.length === 0 ? (
+      {adminTab === 'rate-board' && (
+        <div className="space-y-6">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <h1 className="font-display text-xl font-bold text-[#0A172A]">Published EPR Rate Board &amp; Header Ticker</h1>
+              <p className="text-xs text-[#64748B]">
+                Add, edit, publish, unpublish, or remove official EPR category rates displayed in the header ticker and public rate board.
+              </p>
+            </div>
+            <Button variant="primary" size="sm" onClick={() => openRateEditor()}>
+              + Add Category Rate
+            </Button>
+          </div>
+
+          <div className="bg-white border border-[#E2E8F0] rounded-lg overflow-hidden">
+            <div className="px-4 py-2.5 bg-[#F8FAFC] border-b border-[#E2E8F0] flex items-center justify-between text-xs">
+              <span className="font-semibold text-[#0A172A]">Live Website Header Ticker Preview</span>
+              <span className="text-[#64748B] font-mono">
+                {publishedRates.filter((r) => r.published).length} published rate(s)
+              </span>
+            </div>
+            <EprRateTickerBar rates={publishedRates} />
+          </div>
+
+          {publishedRates.length === 0 ? (
             <EmptyState
-              title="No market rate records yet."
-              description="Market rate entries are automatically computed from active approved seller listings and completed trades."
+              title="No EPR category rates published yet."
+              description="Click '+ Add Category Rate' to publish approved ₹/MT reference rates to the scrolling website header."
+              actionLabel="+ Add Category Rate"
+              onAction={() => openRateEditor()}
             />
           ) : (
             <div className="bg-white border border-[#E2E8F0] rounded-lg overflow-hidden">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="bg-[#F8FAFC] border-b border-[#E2E8F0] text-[11px] font-semibold uppercase tracking-wider text-[#64748B]">
-                    <th className="py-3 px-4">Category</th>
-                    <th className="py-3 px-4">FY</th>
-                    <th className="py-3 px-4 text-right">Available Qty</th>
-                    <th className="py-3 px-4 text-right">Lowest Ask</th>
-                    <th className="py-3 px-4 text-right">Highest Ask</th>
-                    <th className="py-3 px-4 text-right">Indicative Rate</th>
-                    <th className="py-3 px-4 text-right">Last Traded</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#F1F5F9] text-sm">
-                  {marketRates.map((mr) => (
-                    <tr key={mr.id} className="hover:bg-[#F8FAFC]">
-                      <td className="py-3 px-4 font-semibold">{mr.categoryName}</td>
-                      <td className="py-3 px-4 font-mono text-xs">{mr.financialYear}</td>
-                      <td className="py-3 px-4 text-right font-mono tabular-nums">
-                        {mr.availableQty.toLocaleString('en-IN')} {mr.unit}
-                      </td>
-                      <td className="py-3 px-4 text-right font-mono tabular-nums">
-                        {mr.lowestAskingRate ? formatINR(mr.lowestAskingRate) : '—'}
-                      </td>
-                      <td className="py-3 px-4 text-right font-mono tabular-nums">
-                        {mr.highestAskingRate ? formatINR(mr.highestAskingRate) : '—'}
-                      </td>
-                      <td className="py-3 px-4 text-right font-mono font-semibold text-[#1E3A8A] tabular-nums">
-                        {mr.indicativeRate ? formatINR(mr.indicativeRate) : '—'}
-                      </td>
-                      <td className="py-3 px-4 text-right font-mono font-bold text-[#16A36A] tabular-nums">
-                        {mr.lastTradedRate ? formatINR(mr.lastTradedRate) : 'No Trades'}
-                      </td>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-[#F8FAFC] border-b border-[#E2E8F0] text-[11px] font-semibold uppercase tracking-wider text-[#64748B]">
+                      <th className="py-3 px-4">Category</th>
+                      <th className="py-3 px-4">Financial Year</th>
+                      <th className="py-3 px-4 text-right">Approved Rate</th>
+                      <th className="py-3 px-4">Trend</th>
+                      <th className="py-3 px-4">Notes</th>
+                      <th className="py-3 px-4">Visibility</th>
+                      <th className="py-3 px-4">Updated</th>
+                      <th className="py-3 px-4 text-right">Actions</th>
                     </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#F1F5F9] text-xs">
+                    {publishedRates.map((item) => (
+                      <tr key={item.id} className="hover:bg-[#F8FAFC]">
+                        <td className="py-3 px-4 font-semibold text-[#0A172A]">{item.categoryName}</td>
+                        <td className="py-3 px-4 font-mono text-[#475569]">{item.financialYear}</td>
+                        <td className="py-3 px-4 text-right font-mono font-bold text-[#10233F] tabular-nums">
+                          {formatINR(item.rate)}/{item.unit}
+                        </td>
+                        <td className="py-3 px-4 font-medium">{item.trend || 'Stable'}</td>
+                        <td className="py-3 px-4 text-[#64748B] max-w-[200px] truncate">{item.notes || '—'}</td>
+                        <td className="py-3 px-4">
+                          <StatusBadge status={item.published ? 'Active' : 'Paused'} />
+                        </td>
+                        <td className="py-3 px-4 font-mono text-[#64748B]">{formatTime(item.updatedAt)}</td>
+                        <td className="py-3 px-4 text-right space-x-1 whitespace-nowrap">
+                          <Button variant="ghost" size="sm" onClick={() => openRateEditor(item)}>
+                            Edit
+                          </Button>
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => void adminTogglePublishedRate(item)}
+                          >
+                            {item.published ? 'Unpublish' : 'Publish'}
+                          </Button>
+                          <Button
+                            variant="danger"
+                            size="sm"
+                            onClick={() => setDeleteRateConfirm(item)}
+                          >
+                            Remove
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          <Modal
+            open={rateModalOpen}
+            onClose={() => setRateModalOpen(false)}
+            title={editRateItem ? `Edit Rate — ${editRateItem.categoryName}` : 'Add Published EPR Category Rate'}
+            maxWidth="max-w-md"
+          >
+            <form
+              className="space-y-4"
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const parsedRate = Number(rateValue);
+                if (!Number.isFinite(parsedRate) || parsedRate <= 0) {
+                  addToast({ type: 'error', title: 'Enter a valid positive rate in INR' });
+                  return;
+                }
+                const selectedCat = categories.find((c) => c.id === rateCatId);
+                const finalCatId =
+                  rateCatId === 'CUSTOM'
+                    ? rateCustomName
+                        .toLowerCase()
+                        .replace(/[^a-z0-9]+/g, '-')
+                        .replace(/^-|-$/g, '') || `cat-${Date.now()}`
+                    : selectedCat?.id || rateCatId;
+                const finalCatName =
+                  rateCatId === 'CUSTOM' ? rateCustomName.trim() : selectedCat?.name || rateCustomName.trim();
+                const finalUnit =
+                  rateCatId === 'CUSTOM' ? rateUnit : selectedCat?.unit || rateUnit;
+                if (!finalCatName) {
+                  addToast({ type: 'error', title: 'Category name is required' });
+                  return;
+                }
+                setSavingRate(true);
+                try {
+                  await adminSavePublishedRate({
+                    id: editRateItem?.id,
+                    categoryId: finalCatId,
+                    categoryName: finalCatName,
+                    financialYear: rateFy,
+                    unit: finalUnit,
+                    rate: parsedRate,
+                    trend: rateTrend,
+                    published: ratePublished,
+                    notes: rateNotes.trim(),
+                  });
+                  setRateModalOpen(false);
+                } finally {
+                  setSavingRate(false);
+                }
+              }}
+            >
+              <div>
+                <label className="block text-xs font-semibold text-[#334155] mb-1">EPR Category *</label>
+                <select
+                  value={rateCatId}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setRateCatId(val);
+                    const found = categories.find((c) => c.id === val);
+                    if (found) {
+                      setRateCustomName(found.name);
+                      setRateUnit(found.unit);
+                    }
+                  }}
+                  className="w-full h-10 px-3 text-sm border border-[#CBD5E1] rounded-lg bg-white"
+                >
+                  {categories.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name} ({c.unit})
+                    </option>
                   ))}
-                </tbody>
-              </table>
+                  <option value="CUSTOM">Custom Category Name</option>
+                </select>
+              </div>
+
+              {rateCatId === 'CUSTOM' && (
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="col-span-2">
+                    <label className="block text-xs font-semibold text-[#334155] mb-1">Category Name *</label>
+                    <input
+                      required
+                      value={rateCustomName}
+                      onChange={(e) => setRateCustomName(e.target.value)}
+                      placeholder="e.g. Plastic Cat-I"
+                      className="w-full h-10 px-3 text-sm border border-[#CBD5E1] rounded-lg"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-[#334155] mb-1">Unit</label>
+                    <select
+                      value={rateUnit}
+                      onChange={(e) => setRateUnit(e.target.value as 'MT' | 'KL' | 'Units')}
+                      className="w-full h-10 px-3 text-sm border border-[#CBD5E1] rounded-lg bg-white"
+                    >
+                      <option value="MT">MT</option>
+                      <option value="KL">KL</option>
+                      <option value="Units">Units</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-[#334155] mb-1">Financial Year *</label>
+                  <select
+                    value={rateFy}
+                    onChange={(e) => setRateFy(e.target.value)}
+                    className="w-full h-10 px-3 text-sm border border-[#CBD5E1] rounded-lg bg-white"
+                  >
+                    <option value="FY 2024-25">FY 2024-25</option>
+                    <option value="FY 2025-26">FY 2025-26</option>
+                    <option value="FY 2026-27">FY 2026-27</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-[#334155] mb-1">Trend</label>
+                  <select
+                    value={rateTrend}
+                    onChange={(e) => setRateTrend(e.target.value as 'Up' | 'Down' | 'Stable')}
+                    className="w-full h-10 px-3 text-sm border border-[#CBD5E1] rounded-lg bg-white"
+                  >
+                    <option value="Stable">Stable</option>
+                    <option value="Up">Up</option>
+                    <option value="Down">Down</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[#334155] mb-1">
+                  Rate (₹ / {rateUnit}) *
+                </label>
+                <input
+                  type="number"
+                  required
+                  min={1}
+                  step="any"
+                  value={rateValue}
+                  onChange={(e) => setRateValue(e.target.value)}
+                  placeholder="e.g. 1250"
+                  className="w-full h-10 px-3 text-sm font-mono border border-[#CBD5E1] rounded-lg"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[#334155] mb-1">Desk Notes (Optional)</label>
+                <input
+                  value={rateNotes}
+                  onChange={(e) => setRateNotes(e.target.value)}
+                  placeholder="e.g. Indicative spot reference"
+                  className="w-full h-10 px-3 text-sm border border-[#CBD5E1] rounded-lg"
+                />
+              </div>
+
+              <label className="flex items-center gap-2 text-xs font-medium text-[#0A172A] cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={ratePublished}
+                  onChange={(e) => setRatePublished(e.target.checked)}
+                />
+                <span>Publish immediately to public website header ticker &amp; rate board</span>
+              </label>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <Button variant="secondary" onClick={() => setRateModalOpen(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit" variant="primary" disabled={savingRate}>
+                  {savingRate ? 'Saving...' : editRateItem ? 'Update Rate' : 'Save Rate'}
+                </Button>
+              </div>
+            </form>
+          </Modal>
+
+          <ConfirmModal
+            open={deleteRateConfirm !== null}
+            onClose={() => setDeleteRateConfirm(null)}
+            onConfirm={() => {
+              if (deleteRateConfirm) void adminDeletePublishedRate(deleteRateConfirm);
+            }}
+            title="Remove Published Rate"
+            description={`Remove the rate entry for ${deleteRateConfirm?.categoryName} (${deleteRateConfirm?.financialYear}) from the website ticker and rate board?`}
+            confirmLabel="Remove Rate"
+            variant="danger"
+          />
+        </div>
+      )}
+
+      {adminTab === 'inventory' && (
+        <div className="space-y-4">
+          <h1 className="font-display text-xl font-bold text-[#0A172A]">Marketplace Inventory Summary</h1>
+          {marketRates.length === 0 ? (
+            <EmptyState
+              title="No marketplace inventory summaries yet."
+              description="Inventory volumes and seller asking ranges appear automatically from active seller listings."
+            />
+          ) : (
+            <div className="bg-white border border-[#E2E8F0] rounded-lg overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-[#F8FAFC] border-b border-[#E2E8F0] text-[11px] font-semibold uppercase tracking-wider text-[#64748B]">
+                      <th className="py-3 px-4">Category</th>
+                      <th className="py-3 px-4">FY</th>
+                      <th className="py-3 px-4 text-right">Available Qty</th>
+                      <th className="py-3 px-4 text-right">Lowest Ask</th>
+                      <th className="py-3 px-4 text-right">Highest Ask</th>
+                      <th className="py-3 px-4 text-right">Indicative Rate</th>
+                      <th className="py-3 px-4 text-right">Last Traded</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#F1F5F9] text-sm">
+                    {marketRates.map((mr) => (
+                      <tr key={mr.id} className="hover:bg-[#F8FAFC]">
+                        <td className="py-3 px-4 font-semibold">{mr.categoryName}</td>
+                        <td className="py-3 px-4 font-mono text-xs">{mr.financialYear}</td>
+                        <td className="py-3 px-4 text-right font-mono tabular-nums">
+                          {mr.availableQty.toLocaleString('en-IN')} {mr.unit}
+                        </td>
+                        <td className="py-3 px-4 text-right font-mono tabular-nums">
+                          {mr.lowestAskingRate ? formatINR(mr.lowestAskingRate) : '—'}
+                        </td>
+                        <td className="py-3 px-4 text-right font-mono tabular-nums">
+                          {mr.highestAskingRate ? formatINR(mr.highestAskingRate) : '—'}
+                        </td>
+                        <td className="py-3 px-4 text-right font-mono font-semibold text-[#1E3A8A] tabular-nums">
+                          {mr.indicativeRate ? formatINR(mr.indicativeRate) : '—'}
+                        </td>
+                        <td className="py-3 px-4 text-right font-mono font-bold text-[#16A36A] tabular-nums">
+                          {mr.lastTradedRate ? formatINR(mr.lastTradedRate) : 'No Trades'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </div>
@@ -982,38 +1311,40 @@ export const AdminPortal: React.FC = () => {
             />
           ) : (
             <div className="bg-white border border-[#E2E8F0] rounded-lg overflow-hidden">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="bg-[#F8FAFC] border-b border-[#E2E8F0] text-[11px] font-semibold uppercase tracking-wider text-[#64748B]">
-                    <th className="py-3 px-4">Match ID</th>
-                    <th className="py-3 px-4">Buyer</th>
-                    <th className="py-3 px-4">Seller</th>
-                    <th className="py-3 px-4">Category</th>
-                    <th className="py-3 px-4 text-right">Qty</th>
-                    <th className="py-3 px-4 text-right">Buyer Rate</th>
-                    <th className="py-3 px-4 text-right">Seller Rate</th>
-                    <th className="py-3 px-4">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#F1F5F9] text-xs">
-                  {matches.map((m) => (
-                    <tr key={m.id} className="hover:bg-[#F8FAFC]">
-                      <td className="py-3 px-4 font-mono font-semibold">{m.id}</td>
-                      <td className="py-3 px-4">{getBuyerName(m.buyerUid)}</td>
-                      <td className="py-3 px-4">{getSellerName(m.sellerUid)}</td>
-                      <td className="py-3 px-4 font-medium">{m.categoryName}</td>
-                      <td className="py-3 px-4 text-right font-mono tabular-nums">
-                        {m.matchingQty} {m.unit}
-                      </td>
-                      <td className="py-3 px-4 text-right font-mono tabular-nums">{formatINR(m.buyerTargetRate)}</td>
-                      <td className="py-3 px-4 text-right font-mono tabular-nums">{formatINR(m.sellerAskingRate)}</td>
-                      <td className="py-3 px-4">
-                        <StatusBadge status={m.status} />
-                      </td>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-[#F8FAFC] border-b border-[#E2E8F0] text-[11px] font-semibold uppercase tracking-wider text-[#64748B]">
+                      <th className="py-3 px-4">Match ID</th>
+                      <th className="py-3 px-4">Buyer</th>
+                      <th className="py-3 px-4">Seller</th>
+                      <th className="py-3 px-4">Category</th>
+                      <th className="py-3 px-4 text-right">Qty</th>
+                      <th className="py-3 px-4 text-right">Buyer Rate</th>
+                      <th className="py-3 px-4 text-right">Seller Rate</th>
+                      <th className="py-3 px-4">Status</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-[#F1F5F9] text-xs">
+                    {matches.map((m) => (
+                      <tr key={m.id} className="hover:bg-[#F8FAFC]">
+                        <td className="py-3 px-4 font-mono font-semibold">{m.id}</td>
+                        <td className="py-3 px-4">{getBuyerName(m.buyerUid)}</td>
+                        <td className="py-3 px-4">{getSellerName(m.sellerUid)}</td>
+                        <td className="py-3 px-4 font-medium">{m.categoryName}</td>
+                        <td className="py-3 px-4 text-right font-mono tabular-nums">
+                          {m.matchingQty} {m.unit}
+                        </td>
+                        <td className="py-3 px-4 text-right font-mono tabular-nums">{formatINR(m.buyerTargetRate)}</td>
+                        <td className="py-3 px-4 text-right font-mono tabular-nums">{formatINR(m.sellerAskingRate)}</td>
+                        <td className="py-3 px-4">
+                          <StatusBadge status={m.status} />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </div>
@@ -1209,7 +1540,7 @@ export const AdminPortal: React.FC = () => {
             <div>
               <h1 className="font-display text-xl font-bold text-[#0A172A]">Reports & Analytics</h1>
               <p className="text-xs text-[#64748B]">
-                Export live Firestore marketplace datasets to CSV / Excel-compatible formats.
+                Export live marketplace datasets to CSV / Excel-compatible formats.
               </p>
             </div>
             <CsvExportButton
@@ -1257,7 +1588,7 @@ export const AdminPortal: React.FC = () => {
             </div>
             {activeReport.rows.length === 0 ? (
               <div className="py-6 text-center text-xs text-[#64748B]">
-                No database records found for {reportType} yet.
+                No records found for {reportType} yet.
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -1299,34 +1630,36 @@ export const AdminPortal: React.FC = () => {
             />
           ) : (
             <div className="bg-white border border-[#E2E8F0] rounded-lg overflow-hidden">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="bg-[#F8FAFC] border-b border-[#E2E8F0] text-[11px] font-semibold uppercase tracking-wider text-[#64748B]">
-                    <th className="py-3 px-4">Log ID</th>
-                    <th className="py-3 px-4">Timestamp</th>
-                    <th className="py-3 px-4">Actor</th>
-                    <th className="py-3 px-4">Action</th>
-                    <th className="py-3 px-4">Target</th>
-                    <th className="py-3 px-4">Details</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#F1F5F9] text-xs">
-                  {auditLogs.map((log) => (
-                    <tr key={log.id} className="hover:bg-[#F8FAFC]">
-                      <td className="py-3 px-4 font-mono font-semibold">{log.id}</td>
-                      <td className="py-3 px-4 font-mono text-[#64748B]">{formatTime(log.createdAt)}</td>
-                      <td className="py-3 px-4 font-medium">
-                        {log.actorEmail} ({log.role})
-                      </td>
-                      <td className="py-3 px-4">
-                        <StatusBadge status={log.action} />
-                      </td>
-                      <td className="py-3 px-4 font-mono">{log.target}</td>
-                      <td className="py-3 px-4 text-[#475569]">{log.details}</td>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-[#F8FAFC] border-b border-[#E2E8F0] text-[11px] font-semibold uppercase tracking-wider text-[#64748B]">
+                      <th className="py-3 px-4">Log ID</th>
+                      <th className="py-3 px-4">Timestamp</th>
+                      <th className="py-3 px-4">Actor</th>
+                      <th className="py-3 px-4">Action</th>
+                      <th className="py-3 px-4">Target</th>
+                      <th className="py-3 px-4">Details</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-[#F1F5F9] text-xs">
+                    {auditLogs.map((log) => (
+                      <tr key={log.id} className="hover:bg-[#F8FAFC]">
+                        <td className="py-3 px-4 font-mono font-semibold">{log.id}</td>
+                        <td className="py-3 px-4 font-mono text-[#64748B]">{formatTime(log.createdAt)}</td>
+                        <td className="py-3 px-4 font-medium">
+                          {log.actorEmail} ({log.role})
+                        </td>
+                        <td className="py-3 px-4">
+                          <StatusBadge status={log.action} />
+                        </td>
+                        <td className="py-3 px-4 font-mono">{log.target}</td>
+                        <td className="py-3 px-4 text-[#475569]">{log.details}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </div>
@@ -1432,7 +1765,7 @@ export const AdminPortal: React.FC = () => {
                   <Mail className="w-4 h-4 text-[#1E3A8A]" /> Two-Way Email Delivery Logs
                 </h2>
                 <p className="text-xs text-[#64748B]">
-                  Audit trail of category-matched buyer/seller email notifications dispatched by the backend service.
+                  Audit trail of category-matched buyer/seller email notifications dispatched by the notification service.
                 </p>
               </div>
               <div className="flex items-center gap-2">
@@ -1583,7 +1916,7 @@ export const AdminPortal: React.FC = () => {
               addToast({
                 type: 'error',
                 title: 'Provisioning failed',
-                description: err instanceof Error ? err.message : 'Check UID and email format.',
+                description: err instanceof Error ? err.message : 'Check Staff Account ID and email format.',
               });
             } finally {
               setSavingStaff(false);
@@ -1591,15 +1924,15 @@ export const AdminPortal: React.FC = () => {
           }}
         >
           <p className="text-xs text-[#475569]">
-            Create the user in Firebase Console Authentication first, then register their Firebase UID here.
+            Enter the authorised staff member&apos;s Account ID and verified email below to grant portal access.
           </p>
           <div>
-            <label className="block text-xs font-semibold text-[#334155] mb-1">Firebase Auth UID *</label>
+            <label className="block text-xs font-semibold text-[#334155] mb-1">Staff Account ID *</label>
             <input
               required
               value={staffUid}
               onChange={(e) => setStaffUid(e.target.value)}
-              placeholder="Paste Firebase Auth UID"
+              placeholder="Enter Staff Account ID"
               className="w-full h-10 px-3 text-sm font-mono border border-[#CBD5E1] rounded-lg"
             />
           </div>

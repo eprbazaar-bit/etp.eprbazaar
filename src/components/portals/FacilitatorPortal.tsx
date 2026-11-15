@@ -630,7 +630,7 @@ export const FacilitatorPortal: React.FC = () => {
                 }}
               >
                 <p className="text-xs text-[#475569]">
-                  Confirming agreement creates an official Order and GST Invoice record in Firestore.
+                  Confirming agreement creates an official Order and GST Invoice record on the platform.
                 </p>
                 <div>
                   <label className="block text-xs font-semibold text-[#334155] mb-1">
@@ -671,36 +671,38 @@ export const FacilitatorPortal: React.FC = () => {
             <EmptyState title="No buyers registered yet." description="Registered buyer accounts will appear here." />
           ) : (
             <div className="bg-white border border-[#E2E8F0] rounded-lg overflow-hidden">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="bg-[#F8FAFC] border-b border-[#E2E8F0] text-[11px] font-semibold uppercase tracking-wider text-[#64748B]">
-                    <th className="py-3 px-4">Company</th>
-                    <th className="py-3 px-4">Contact</th>
-                    <th className="py-3 px-4">City</th>
-                    <th className="py-3 px-4">Verification</th>
-                    <th className="py-3 px-4 text-right">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#F1F5F9] text-sm">
-                  {buyers.map((b) => (
-                    <tr key={b.uid} className="hover:bg-[#F8FAFC]">
-                      <td className="py-3 px-4 font-medium">{b.companyName}</td>
-                      <td className="py-3 px-4 text-xs text-[#475569]">
-                        {b.contactPerson} · {b.mobile}
-                      </td>
-                      <td className="py-3 px-4 text-xs">{b.city || '—'}</td>
-                      <td className="py-3 px-4">
-                        <StatusBadge status={b.verification} />
-                      </td>
-                      <td className="py-3 px-4 text-right">
-                        <Button variant="ghost" size="sm" onClick={() => setDetailBuyer(b)}>
-                          Details
-                        </Button>
-                      </td>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-[#F8FAFC] border-b border-[#E2E8F0] text-[11px] font-semibold uppercase tracking-wider text-[#64748B]">
+                      <th className="py-3 px-4">Company</th>
+                      <th className="py-3 px-4">Contact</th>
+                      <th className="py-3 px-4">City</th>
+                      <th className="py-3 px-4">Verification</th>
+                      <th className="py-3 px-4 text-right">Action</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-[#F1F5F9] text-sm">
+                    {buyers.map((b) => (
+                      <tr key={b.uid} className="hover:bg-[#F8FAFC]">
+                        <td className="py-3 px-4 font-medium">{b.companyName}</td>
+                        <td className="py-3 px-4 text-xs text-[#475569]">
+                          {b.contactPerson} · {b.mobile}
+                        </td>
+                        <td className="py-3 px-4 text-xs">{b.city || '—'}</td>
+                        <td className="py-3 px-4">
+                          <StatusBadge status={b.verification} />
+                        </td>
+                        <td className="py-3 px-4 text-right">
+                          <Button variant="ghost" size="sm" onClick={() => setDetailBuyer(b)}>
+                            Details
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
           <Modal
@@ -736,36 +738,38 @@ export const FacilitatorPortal: React.FC = () => {
             <EmptyState title="No sellers registered yet." description="Registered seller accounts will appear here." />
           ) : (
             <div className="bg-white border border-[#E2E8F0] rounded-lg overflow-hidden">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="bg-[#F8FAFC] border-b border-[#E2E8F0] text-[11px] font-semibold uppercase tracking-wider text-[#64748B]">
-                    <th className="py-3 px-4">Company</th>
-                    <th className="py-3 px-4">Type</th>
-                    <th className="py-3 px-4">Contact</th>
-                    <th className="py-3 px-4">Verification</th>
-                    <th className="py-3 px-4 text-right">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#F1F5F9] text-sm">
-                  {sellers.map((s) => (
-                    <tr key={s.uid} className="hover:bg-[#F8FAFC]">
-                      <td className="py-3 px-4 font-medium">{s.companyName}</td>
-                      <td className="py-3 px-4 text-xs text-[#475569]">{s.recyclerType}</td>
-                      <td className="py-3 px-4 text-xs">
-                        {s.contactPerson} · {s.mobile}
-                      </td>
-                      <td className="py-3 px-4">
-                        <StatusBadge status={s.verification} />
-                      </td>
-                      <td className="py-3 px-4 text-right">
-                        <Button variant="ghost" size="sm" onClick={() => setDetailSeller(s)}>
-                          Details
-                        </Button>
-                      </td>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-[#F8FAFC] border-b border-[#E2E8F0] text-[11px] font-semibold uppercase tracking-wider text-[#64748B]">
+                      <th className="py-3 px-4">Company</th>
+                      <th className="py-3 px-4">Type</th>
+                      <th className="py-3 px-4">Contact</th>
+                      <th className="py-3 px-4">Verification</th>
+                      <th className="py-3 px-4 text-right">Action</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-[#F1F5F9] text-sm">
+                    {sellers.map((s) => (
+                      <tr key={s.uid} className="hover:bg-[#F8FAFC]">
+                        <td className="py-3 px-4 font-medium">{s.companyName}</td>
+                        <td className="py-3 px-4 text-xs text-[#475569]">{s.recyclerType}</td>
+                        <td className="py-3 px-4 text-xs">
+                          {s.contactPerson} · {s.mobile}
+                        </td>
+                        <td className="py-3 px-4">
+                          <StatusBadge status={s.verification} />
+                        </td>
+                        <td className="py-3 px-4 text-right">
+                          <Button variant="ghost" size="sm" onClick={() => setDetailSeller(s)}>
+                            Details
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
           <Modal
@@ -891,39 +895,41 @@ export const FacilitatorPortal: React.FC = () => {
             <EmptyState title="No offers issued yet." description="Offers sent from match workspaces will appear here." />
           ) : (
             <div className="bg-white border border-[#E2E8F0] rounded-lg overflow-hidden">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="bg-[#F8FAFC] border-b border-[#E2E8F0] text-[11px] font-semibold uppercase tracking-wider text-[#64748B]">
-                    <th className="py-3 px-4">Offer ID</th>
-                    <th className="py-3 px-4">Match</th>
-                    <th className="py-3 px-4">Recipient</th>
-                    <th className="py-3 px-4 text-right">Qty</th>
-                    <th className="py-3 px-4 text-right">Offered Rate</th>
-                    <th className="py-3 px-4">Expiry</th>
-                    <th className="py-3 px-4">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#F1F5F9] text-sm">
-                  {offers.map((o) => (
-                    <tr key={o.id} className="hover:bg-[#F8FAFC]">
-                      <td className="py-3 px-4 font-mono text-xs font-semibold">{o.id}</td>
-                      <td className="py-3 px-4 font-mono text-xs">{o.matchId}</td>
-                      <td className="py-3 px-4 uppercase text-xs font-semibold">
-                        {o.targetParty} (
-                        {o.targetParty === 'buyer' ? getBuyerName(o.partyUid) : getSellerName(o.partyUid)})
-                      </td>
-                      <td className="py-3 px-4 text-right font-mono tabular-nums">
-                        {o.quantity} {o.unit}
-                      </td>
-                      <td className="py-3 px-4 text-right font-mono tabular-nums">{formatINR(o.offeredRate)}</td>
-                      <td className="py-3 px-4 font-mono text-xs">{o.expiryDate}</td>
-                      <td className="py-3 px-4">
-                        <StatusBadge status={o.status} />
-                      </td>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-[#F8FAFC] border-b border-[#E2E8F0] text-[11px] font-semibold uppercase tracking-wider text-[#64748B]">
+                      <th className="py-3 px-4">Offer ID</th>
+                      <th className="py-3 px-4">Match</th>
+                      <th className="py-3 px-4">Recipient</th>
+                      <th className="py-3 px-4 text-right">Qty</th>
+                      <th className="py-3 px-4 text-right">Offered Rate</th>
+                      <th className="py-3 px-4">Expiry</th>
+                      <th className="py-3 px-4">Status</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-[#F1F5F9] text-sm">
+                    {offers.map((o) => (
+                      <tr key={o.id} className="hover:bg-[#F8FAFC]">
+                        <td className="py-3 px-4 font-mono text-xs font-semibold">{o.id}</td>
+                        <td className="py-3 px-4 font-mono text-xs">{o.matchId}</td>
+                        <td className="py-3 px-4 uppercase text-xs font-semibold">
+                          {o.targetParty} (
+                          {o.targetParty === 'buyer' ? getBuyerName(o.partyUid) : getSellerName(o.partyUid)})
+                        </td>
+                        <td className="py-3 px-4 text-right font-mono tabular-nums">
+                          {o.quantity} {o.unit}
+                        </td>
+                        <td className="py-3 px-4 text-right font-mono tabular-nums">{formatINR(o.offeredRate)}</td>
+                        <td className="py-3 px-4 font-mono text-xs">{o.expiryDate}</td>
+                        <td className="py-3 px-4">
+                          <StatusBadge status={o.status} />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </div>

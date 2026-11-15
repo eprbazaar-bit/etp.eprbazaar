@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Bell, LogOut, Menu, X } from 'lucide-react';
-import { ErrorAlertBanner, LogoMark } from '../ui/DesignSystem';
+import { EprRateTickerBar, ErrorAlertBanner, LogoMark } from '../ui/DesignSystem';
 import { useMarketplace } from '../../context/MarketplaceContext';
 
 export interface SidebarNavItem {
@@ -33,7 +33,7 @@ export const PortalShell: React.FC<PortalShellProps> = ({
   headerAction,
   children,
 }) => {
-  const { role, notifications, logout, navigatePublic, connectionError, permissionError } = useMarketplace();
+  const { role, notifications, publishedRates, logout, navigatePublic, connectionError, permissionError } = useMarketplace();
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const unreadCount = notifications.filter((n) => n.targetRole === role && !n.read).length;
@@ -122,49 +122,52 @@ export const PortalShell: React.FC<PortalShellProps> = ({
       )}
 
       <div className="flex-1 min-w-0 flex flex-col">
-        <header className="sticky top-0 z-30 h-16 bg-white border-b border-[#E2E8F0] px-4 sm:px-6 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3 min-w-0">
-            <button
-              type="button"
-              onClick={() => setMobileOpen(true)}
-              className="lg:hidden p-2 rounded-md border border-[#E2E8F0] text-[#0A172A]"
-              aria-label="Open navigation"
-            >
-              <Menu className="w-4 h-4" />
-            </button>
-            <div className="flex items-center gap-2 text-sm min-w-0">
-              <span className="text-[#64748B] hidden sm:inline">{portalTitle}</span>
-              <span className="text-[#CBD5E1] hidden sm:inline">/</span>
-              <span className="font-display font-semibold text-[#0A172A] capitalize truncate">
-                {activeTab.replace(/-/g, ' ')}
-              </span>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3 shrink-0">
-            {headerAction}
-            <button
-              type="button"
-              onClick={onOpenNotifications}
-              className="relative p-2 rounded-lg border border-[#E2E8F0] text-[#334155] hover:bg-[#F8FAFC] cursor-pointer"
-              aria-label="Notifications"
-            >
-              <Bell className="w-4 h-4" />
-              {unreadCount > 0 && (
-                <span className="absolute -top-1 -right-1 h-4 min-w-[16px] px-1 rounded-full bg-[#16A36A] text-white font-mono text-[10px] font-bold flex items-center justify-center">
-                  {unreadCount}
+        <div className="sticky top-0 z-30 bg-white">
+          <EprRateTickerBar rates={publishedRates} />
+          <header className="h-14 sm:h-16 border-b border-[#E2E8F0] px-4 sm:px-6 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3 min-w-0">
+              <button
+                type="button"
+                onClick={() => setMobileOpen(true)}
+                className="lg:hidden p-2 rounded-md border border-[#E2E8F0] text-[#0A172A]"
+                aria-label="Open navigation"
+              >
+                <Menu className="w-4 h-4" />
+              </button>
+              <div className="flex items-center gap-2 text-sm min-w-0">
+                <span className="text-[#64748B] hidden sm:inline">{portalTitle}</span>
+                <span className="text-[#CBD5E1] hidden sm:inline">/</span>
+                <span className="font-display font-semibold text-[#0A172A] capitalize truncate">
+                  {activeTab.replace(/-/g, ' ')}
                 </span>
-              )}
-            </button>
-          </div>
-        </header>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 shrink-0">
+              {headerAction}
+              <button
+                type="button"
+                onClick={onOpenNotifications}
+                className="relative p-2 rounded-lg border border-[#E2E8F0] text-[#334155] hover:bg-[#F8FAFC] cursor-pointer"
+                aria-label="Notifications"
+              >
+                <Bell className="w-4 h-4" />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1 h-4 min-w-[16px] px-1 rounded-full bg-[#16A36A] text-white font-mono text-[10px] font-bold flex items-center justify-center">
+                    {unreadCount}
+                  </span>
+                )}
+              </button>
+            </div>
+          </header>
+        </div>
 
         <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-[1400px] w-full mx-auto space-y-6">
           {connectionError && (
-            <ErrorAlertBanner title="Firebase Connection Error" message={connectionError} />
+            <ErrorAlertBanner title="Service Connection Notice" message={connectionError} />
           )}
           {permissionError && (
-            <ErrorAlertBanner title="Firestore Access / Sync Notice" message={permissionError} />
+            <ErrorAlertBanner title="Account Sync Notice" message={permissionError} />
           )}
           {children}
         </main>

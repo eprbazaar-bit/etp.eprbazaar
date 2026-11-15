@@ -53,6 +53,7 @@ import {
   PaymentRecord,
   PlatformSettingsRecord,
   PublicPage,
+  PublishedEprRate,
   SellerAccount,
   SellerListing,
   SellerTab,
@@ -67,6 +68,7 @@ import {
   createBuyerRequirementDoc,
   createNotificationIfUnique,
   createSellerListingDoc,
+  deletePublishedRateDoc,
   dispatchCategoryEmailNotificationsApi,
   facilitatorSendOfferDoc,
   recomputeMarketRate,
@@ -75,6 +77,8 @@ import {
   runMatchingForListing,
   runMatchingForRequirement,
   saveCategoryWithSubcategories,
+  savePublishedRateDoc,
+  togglePublishedRateStatusDoc,
   updateOrderStatusDoc,
   uploadProtectedDocument,
   writeAuditLog,
@@ -110,6 +114,7 @@ interface MarketplaceContextValue {
   categories: EPRCategory[];
   subcategories: EPRSubcategory[];
   marketRates: MarketRateRecord[];
+  publishedRates: PublishedEprRate[];
   transactions: TransactionRecord[];
   buyers: BuyerAccount[];
   sellers: SellerAccount[];
@@ -218,6 +223,19 @@ interface MarketplaceContextValue {
     active: boolean;
   }) => Promise<void>;
   adminToggleCategory: (cat: EPRCategory) => Promise<void>;
+  adminSavePublishedRate: (params: {
+    id?: string;
+    categoryId: string;
+    categoryName: string;
+    financialYear: string;
+    unit: 'MT' | 'KL' | 'Units';
+    rate: number;
+    trend?: 'Up' | 'Down' | 'Stable';
+    published: boolean;
+    notes?: string;
+  }) => Promise<void>;
+  adminTogglePublishedRate: (rateItem: PublishedEprRate) => Promise<void>;
+  adminDeletePublishedRate: (rateItem: PublishedEprRate) => Promise<void>;
   adminCreateStaffRecord: (params: {
     roleType: 'facilitator' | 'admin';
     uid: string;
@@ -297,6 +315,7 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const [categories, setCategories] = useState<EPRCategory[]>([]);
   const [subcategories, setSubcategories] = useState<EPRSubcategory[]>([]);
   const [marketRates, setMarketRates] = useState<MarketRateRecord[]>([]);
+  const [publishedRates, setPublishedRates] = useState<PublishedEprRate[]>([]);
   const [transactions, setTransactions] = useState<TransactionRecord[]>([]);
   const [buyers, setBuyers] = useState<BuyerAccount[]>([]);
   const [sellers, setSellers] = useState<SellerAccount[]>([]);
@@ -373,7 +392,7 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
       const res = await testFirestoreConnection();
       if (!mounted) return;
       if (!res.ok) {
-        setConnectionError(res.error || 'Failed to connect to Firebase.');
+        setConnectionError(res.error || 'Unable to connect to the trading platform.');
       } else {
         setConnectionError(null);
         setFirebaseReady(true);
@@ -384,18 +403,17 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
     };
   }, []);
 
-  // 2. Public Real-Time Listeners (categories, subcategories, market_rates, transactions, anonymized active listings)
+  // 2. Public Real-Time Listeners (categories, subcategories, market_rates, published_rates, transactions, anonymized active listings)
   useEffect(() => {
     if (!firebaseReady || !db) return;
     const unsubs: Unsubscribe[] = [];
 
-    const onErr = (path: string) => (err: unknown) => {
-      const msg = err instanceof Error ? err.message : String(err);
-      setPermissionError(`Firestore access error on ${path}: ${msg}`);
+    const onErr = (_path: string) => (err: unknown) => {
+      setPermissionError('Unable to load marketplace data right now. Please refresh the page.');
       try {
-        handleFirestoreError(err, OperationType.LIST, path);
+        handleFirestoreError(err, OperationType.LIST, _path);
       } catch {
-        // already logged
+        // already logged internally
       }
     };
 
@@ -419,6 +437,14 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
           query(collection(db, 'subcategories'), where('active', '==', true)),
           (snap) => setSubcategories(snap.docs.map((d) => d.data() as EPRSubcategory)),
           onErr('subcategories')
+        )
+      );
+
+      unsubs.push(
+        onSnapshot(
+          query(collection(db, 'published_rates'), where('published', '==', true)),
+          (snap) => setPublishedRates(snap.docs.map((d) => d.data() as PublishedEprRate)),
+          onErr('published_rates')
         )
       );
     }
@@ -473,7 +499,7 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
       if (!fbUser.emailVerified) {
         setPermissionError(
-          'Your Firebase Auth email address is not verified yet. Please verify your email address in Firebase Authentication before signing in.'
+          'Your account email address is not verified yet. Please verify your email address before signing in.'
         );
         setRole('public');
         setAuthLoading(false);
@@ -567,8 +593,7 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
     const unsubs: Unsubscribe[] = [];
 
     const onErr = (path: string) => (err: unknown) => {
-      const msg = err instanceof Error ? err.message : String(err);
-      setPermissionError(`Permission or network error loading ${path}: ${msg}`);
+      setPermissionError('Unable to sync your account data right now. Please refresh or contact support.');
       setDataLoading(false);
       try {
         handleFirestoreError(err, OperationType.LIST, path);
@@ -705,6 +730,7 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
       if (role === 'admin') {
         unsubs.push(onSnapshot(collection(db, 'categories'), (s) => setCategories(s.docs.map((d) => d.data() as EPRCategory)), onErr('categories')));
         unsubs.push(onSnapshot(collection(db, 'subcategories'), (s) => setSubcategories(s.docs.map((d) => d.data() as EPRSubcategory)), onErr('subcategories')));
+        unsubs.push(onSnapshot(collection(db, 'published_rates'), (s) => setPublishedRates(s.docs.map((d) => d.data() as PublishedEprRate)), onErr('published_rates')));
         unsubs.push(onSnapshot(collection(db, 'facilitators'), (s) => setFacilitators(s.docs.map((d) => d.data() as FacilitatorAccount)), onErr('facilitators')));
         unsubs.push(onSnapshot(collection(db, 'admins'), (s) => setAdmins(s.docs.map((d) => d.data() as AdminAccount)), onErr('admins')));
         unsubs.push(onSnapshot(collection(db, 'audit_logs'), (s) => setAuditLogs(s.docs.map((d) => d.data() as AuditLogEntry)), onErr('audit_logs')));
@@ -749,7 +775,7 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
   }, [pendingListingDeepLink, role]);
 
   const signInGoogleForRole = async (targetRole: 'buyer' | 'seller' | 'admin') => {
-    if (!auth) throw new Error('Firebase Auth is not initialized.');
+    if (!auth) throw new Error('Authentication service is unavailable right now. Please refresh.');
     if (targetRole === 'buyer' || targetRole === 'seller') {
       setPendingOnboardingRole(targetRole);
     }
@@ -769,7 +795,7 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
     password: string,
     expectedRole: 'facilitator' | 'admin'
   ) => {
-    if (!auth) throw new Error('Firebase Auth is not initialized.');
+    if (!auth) throw new Error('Authentication service is unavailable right now. Please refresh.');
     if (expectedRole === 'facilitator' && !email.trim().toLowerCase().endsWith('@eprbazaar.com')) {
       throw new Error('Facilitator access requires an authorised @eprbazaar.com email address.');
     }
@@ -777,7 +803,7 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
     if (!cred.user.emailVerified) {
       await signOut(auth);
       throw new Error(
-        'This staff account email is not marked verified in Firebase Authentication. Verify the email before signing in.'
+        'This staff account email is not verified yet. Please verify the email before signing in.'
       );
     }
     if (expectedRole === 'facilitator') {
@@ -798,12 +824,12 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
   };
 
   const sendFacilitatorPasswordReset = async (email: string) => {
-    if (!auth) throw new Error('Firebase Auth is not initialized.');
+    if (!auth) throw new Error('Authentication service is unavailable right now. Please refresh.');
     if (!email.trim().toLowerCase().endsWith('@eprbazaar.com')) {
       throw new Error('Only authorised @eprbazaar.com facilitator accounts can reset password here.');
     }
     await sendPasswordResetEmail(auth, email.trim());
-    addToast({ type: 'success', title: 'Password reset email sent via Firebase Auth' });
+    addToast({ type: 'success', title: 'Password reset instructions sent to your email' });
   };
 
   const submitOnboardingProfile = async (data: {
@@ -884,7 +910,7 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
             type: 'warning',
             title: `${emailRes.failedCount} email alert(s) failed & logged for retry`,
             description: emailRes.providerConfigured === false
-              ? 'Email provider credentials are not configured on the backend server yet.'
+              ? 'Email delivery is currently pending activation.'
               : undefined,
           });
         }
@@ -1248,6 +1274,74 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
     }
   };
 
+  const adminSavePublishedRate = async (params: {
+    id?: string;
+    categoryId: string;
+    categoryName: string;
+    financialYear: string;
+    unit: 'MT' | 'KL' | 'Units';
+    rate: number;
+    trend?: 'Up' | 'Down' | 'Stable';
+    published: boolean;
+    notes?: string;
+  }) => {
+    if (!authUser) throw new Error('Authentication required.');
+    await savePublishedRateDoc({
+      ...params,
+      updatedByUid: authUser.uid,
+    });
+    await writeAuditLog(
+      authUser.uid,
+      authUser.email || '',
+      'Admin',
+      params.id ? 'Updated EPR Rate' : 'Added EPR Rate',
+      params.categoryName,
+      `₹${params.rate}/${params.unit} (${params.financialYear}) · ${params.published ? 'Published' : 'Draft'}`
+    );
+    addToast({
+      type: 'success',
+      title: `${params.categoryName} rate ${params.published ? 'published' : 'saved as draft'}`,
+    });
+  };
+
+  const adminTogglePublishedRate = async (rateItem: PublishedEprRate) => {
+    if (!authUser) return;
+    await togglePublishedRateStatusDoc({
+      id: rateItem.id,
+      published: !rateItem.published,
+      updatedByUid: authUser.uid,
+    });
+    await writeAuditLog(
+      authUser.uid,
+      authUser.email || '',
+      'Admin',
+      !rateItem.published ? 'Published EPR Rate' : 'Unpublished EPR Rate',
+      rateItem.categoryName,
+      `${rateItem.financialYear} · ₹${rateItem.rate}/${rateItem.unit}`
+    );
+    addToast({
+      type: 'info',
+      title: `${rateItem.categoryName} rate ${!rateItem.published ? 'published to ticker' : 'unpublished'}`,
+    });
+  };
+
+  const adminDeletePublishedRate = async (rateItem: PublishedEprRate) => {
+    if (!authUser) return;
+    await deletePublishedRateDoc(rateItem.id);
+    await writeAuditLog(
+      authUser.uid,
+      authUser.email || '',
+      'Admin',
+      'Removed EPR Rate',
+      rateItem.categoryName,
+      `${rateItem.financialYear} · ₹${rateItem.rate}/${rateItem.unit}`
+    );
+    addToast({
+      type: 'warning',
+      title: `Removed rate for ${rateItem.categoryName} (${rateItem.financialYear})`,
+    });
+  };
+
   const adminCreateStaffRecord = async (params: {
     roleType: 'facilitator' | 'admin';
     uid: string;
@@ -1260,7 +1354,7 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
     if (!authUser) return;
     const cleanUid = params.uid.trim();
     if (!/^[a-zA-Z0-9_-]{1,128}$/.test(cleanUid)) {
-      throw new Error('Firebase Auth UID must contain only letters, numbers, hyphens, or underscores.');
+      throw new Error('Staff Account ID must contain only letters, numbers, hyphens, or underscores.');
     }
     if (params.roleType === 'facilitator' && !params.email.trim().toLowerCase().endsWith('@eprbazaar.com')) {
       throw new Error('Facilitator email must belong to @eprbazaar.com');
@@ -1288,7 +1382,7 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
         });
       }
       await writeAuditLog(authUser.uid, authUser.email || '', 'Admin', `Created ${params.roleType}`, cleanUid, params.email);
-      addToast({ type: 'success', title: `${params.roleType} access provisioned in Firestore` });
+      addToast({ type: 'success', title: `${params.roleType} access activated` });
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, `${targetCol}/${cleanUid}`);
     }
@@ -1358,7 +1452,7 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
       file,
       relatedId,
     });
-    addToast({ type: 'success', title: `Uploaded ${file.name} to Firebase Storage` });
+    addToast({ type: 'success', title: `Uploaded ${file.name}` });
   };
 
   const markNotificationRead = async (id: string) => {
@@ -1380,7 +1474,7 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
     const idToken = await authUser.getIdToken();
     const res = await retryFailedEmailsApi(idToken, notificationId);
     if (!res.ok) {
-      addToast({ type: 'error', title: 'Retry failed', description: res.error || 'Server error' });
+      addToast({ type: 'error', title: 'Retry failed', description: res.error || 'Unable to retry email delivery' });
       return;
     }
     addToast({
@@ -1419,6 +1513,7 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
         categories,
         subcategories,
         marketRates,
+        publishedRates,
         transactions,
         buyers,
         sellers,
@@ -1466,6 +1561,9 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
         adminVerifyUser,
         adminSaveCategory,
         adminToggleCategory,
+        adminSavePublishedRate,
+        adminTogglePublishedRate,
+        adminDeletePublishedRate,
         adminCreateStaffRecord,
         adminSavePlatformSettings,
         recordPayment,

@@ -38,7 +38,7 @@ export const SellerPortal: React.FC = () => {
     currentSeller,
     categories,
     subcategories,
-    marketRates,
+    publishedRates,
     listings,
     matches,
     offers,
@@ -142,8 +142,8 @@ export const SellerPortal: React.FC = () => {
   const activeOfferDetail = offers.find((o) => o.id === selectedOfferId) || offers[0];
   const activeOrderDetail = orders.find((o) => o.id === selectedOrderId) || orders[0];
 
-  const selectedRateBoard = marketRates.find(
-    (m) => m.categoryId === selectedCat?.id && m.financialYear === fy
+  const selectedPublishedRate = publishedRates.find(
+    (m) => m.published && m.categoryId === selectedCat?.id && m.financialYear === fy
   );
 
   const handleSubmitListing = async (asDraft: boolean) => {
@@ -428,7 +428,7 @@ export const SellerPortal: React.FC = () => {
               <CheckCircle2 className="w-12 h-12 text-[#16A36A] mx-auto" />
               <h1 className="font-display text-2xl font-bold text-[#0A172A]">Listing Recorded</h1>
               <p className="text-sm text-[#475569]">
-                Listing <span className="font-mono font-bold text-[#0A172A]">{submittedListingId}</span> has been saved to Firestore.{' '}
+                Listing <span className="font-mono font-bold text-[#0A172A]">{submittedListingId}</span> has been recorded.{' '}
                 {currentSeller?.verification === 'Verified'
                   ? 'As a verified seller, your listing is live and matching buyers in this category are being notified.'
                   : 'Submitted listings enter the Admin approval queue before entering active matching and buyer alerts.'}
@@ -548,8 +548,8 @@ export const SellerPortal: React.FC = () => {
                     value={rate}
                     onChange={(e) => setRate(e.target.value)}
                     placeholder={
-                      selectedRateBoard?.lowestAskingRate
-                        ? `Current low: ${selectedRateBoard.lowestAskingRate}`
+                      selectedPublishedRate
+                        ? `Reference: ${selectedPublishedRate.rate}`
                         : 'Enter asking rate in INR'
                     }
                     className="w-full h-10 px-3 text-sm font-mono border border-[#CBD5E1] rounded-lg"

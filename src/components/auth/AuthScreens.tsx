@@ -178,7 +178,7 @@ export const AuthScreens: React.FC = () => {
           <ShieldAlert className="w-10 h-10 text-[#D97706] mx-auto" />
           <h1 className="font-display text-xl font-bold text-[#0A172A] mt-3">Access Denied (403)</h1>
           <p className="text-sm text-[#475569] mt-2">
-            Your Firebase account is not authorised for the requested portal role. Privileged roles must be provisioned by
+            Your account is not authorised for the requested portal role. Privileged roles must be provisioned by
             an authorised administrator.
           </p>
           <div className="mt-5 flex justify-center gap-3">
@@ -207,7 +207,7 @@ export const AuthScreens: React.FC = () => {
           </p>
           {resetSent ? (
             <div className="mt-4 p-4 bg-[#DCFCE7] border border-[#86EFAC] rounded-lg text-xs text-[#15803D]">
-              Firebase password reset email dispatched to <span className="font-mono font-semibold">{resetEmail}</span>.
+              Password reset instructions have been sent to <span className="font-mono font-semibold">{resetEmail}</span>.
             </div>
           ) : (
             <form
@@ -444,7 +444,7 @@ export const AuthScreens: React.FC = () => {
 
             <div className="flex justify-end gap-3 pt-2">
               <Button type="submit" variant="primary" disabled={savingProfile}>
-                {savingProfile ? 'Saving to Firestore...' : 'Save Profile & Continue'}
+                {savingProfile ? 'Saving profile...' : 'Save Profile & Continue'}
               </Button>
             </div>
           </form>
@@ -460,13 +460,13 @@ export const AuthScreens: React.FC = () => {
           <LogoMark onClick={() => navigatePublic('home')} />
         </div>
         <div className="text-xs font-semibold uppercase tracking-[0.06em] text-[#64748B]">
-          ETP – EPR Bazaar Firebase Authentication
+          ETP – EPR Bazaar Portal Access
         </div>
         <h1 className="font-display text-2xl sm:text-3xl font-bold text-[#0A172A] mt-1">
-          Access Your EPR Trading Account
+          Sign In to Your Trading Account
         </h1>
         <p className="mt-2 text-sm text-[#475569]">
-          Buyers and Sellers authenticate via Google Sign-In. Facilitators and Administrators use protected company
+          Corporate Buyers and Sellers sign in with Google. Authorised Facilitators and Administrators use protected company
           credentials.
         </p>
       </div>

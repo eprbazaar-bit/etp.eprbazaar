@@ -278,7 +278,7 @@ export const DocumentsView: React.FC<{ ownerFilterRole: 'buyer' | 'seller' | 'ad
               Cancel
             </Button>
             <Button type="submit" variant="primary" disabled={uploading}>
-              {uploading ? 'Uploading...' : 'Upload to Storage'}
+              {uploading ? 'Uploading...' : 'Upload Document'}
             </Button>
           </div>
         </form>
@@ -309,7 +309,7 @@ export const DocumentsView: React.FC<{ ownerFilterRole: 'buyer' | 'seller' | 'ad
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-lg bg-[#10233F] text-white"
                 >
-                  <Download className="w-3.5 h-3.5" /> Open Stored File
+                  <Download className="w-3.5 h-3.5" /> Open File
                 </a>
               </div>
             </div>
@@ -434,7 +434,7 @@ export const CompanyProfileView: React.FC<{
     return (
       <EmptyState
         title="Profile Record Unavailable"
-        description="Your company record could not be retrieved from Firestore. Please refresh or contact support."
+        description="Your company record could not be loaded right now. Please refresh or contact support."
       />
     );
   }
@@ -582,7 +582,7 @@ export const CompanyProfileView: React.FC<{
         emailNotificationsEnabled,
         updatedAt: serverTimestamp(),
       });
-      addToast({ type: 'success', title: 'Company profile & categories updated in Firestore' });
+      addToast({ type: 'success', title: 'Company profile and notification preferences updated' });
     } catch (error) {
       addToast({ type: 'error', title: 'Failed to update contact details' });
       handleFirestoreError(error, OperationType.UPDATE, `${col}/${account.uid}`);

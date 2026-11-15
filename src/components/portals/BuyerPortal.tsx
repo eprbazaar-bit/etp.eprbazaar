@@ -38,7 +38,7 @@ export const BuyerPortal: React.FC = () => {
     currentBuyer,
     categories,
     subcategories,
-    marketRates,
+    publishedRates,
     requirements,
     matches,
     offers,
@@ -193,8 +193,8 @@ export const BuyerPortal: React.FC = () => {
     }
   };
 
-  const selectedRateBoard = marketRates.find(
-    (m) => m.categoryId === selectedCatObj?.id && m.financialYear === reqFy
+  const selectedPublishedRate = publishedRates.find(
+    (m) => m.published && m.categoryId === selectedCatObj?.id && m.financialYear === reqFy
   );
 
   return (
@@ -433,7 +433,7 @@ export const BuyerPortal: React.FC = () => {
               <CheckCircle2 className="w-12 h-12 text-[#16A36A] mx-auto" />
               <h1 className="font-display text-2xl font-bold text-[#0A172A]">EPR Requirement Recorded</h1>
               <p className="text-sm text-[#475569]">
-                Requirement Reference <span className="font-mono font-bold text-[#0A172A]">{submittedReqId}</span> has been saved to Firestore. Compatible active seller inventory is automatically matched and notified.
+                Requirement Reference <span className="font-mono font-bold text-[#0A172A]">{submittedReqId}</span> has been submitted. Compatible active seller inventory is automatically matched and notified.
               </p>
               <div className="flex justify-center gap-3 pt-2">
                 <Button variant="primary" onClick={() => setBuyerTab('my-requirements')}>
@@ -556,8 +556,8 @@ export const BuyerPortal: React.FC = () => {
                       value={reqRate}
                       onChange={(e) => setReqRate(e.target.value)}
                       placeholder={
-                        selectedRateBoard?.indicativeRate
-                          ? `Indicative: ${selectedRateBoard.indicativeRate}`
+                        selectedPublishedRate
+                          ? `Reference: ${selectedPublishedRate.rate}`
                           : 'Enter target rate in INR'
                       }
                       className="w-full h-10 pl-3 pr-12 text-sm font-mono border border-[#CBD5E1] rounded-lg"

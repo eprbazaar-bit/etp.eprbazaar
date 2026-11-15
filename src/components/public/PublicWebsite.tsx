@@ -1,12 +1,15 @@
 import React, { useState } from 'react';
 import {
+  ArrowDownRight,
   ArrowRight,
+  ArrowUpRight,
   Building2,
   CheckCircle2,
   ChevronRight,
   Lock,
   Mail,
   Menu,
+  Minus,
   Phone,
   Search,
   ShieldCheck,
@@ -15,7 +18,7 @@ import {
   X,
 } from 'lucide-react';
 import { useMarketplace } from '../../context/MarketplaceContext';
-import { Button, EmptyState, ErrorAlertBanner, formatINR, LogoMark, StatusBadge } from '../ui/DesignSystem';
+import { Button, EmptyState, EprRateTickerBar, ErrorAlertBanner, formatINR, LogoMark, StatusBadge } from '../ui/DesignSystem';
 import { formatTime, PublicPage } from '../../types';
 
 export const PublicWebsite: React.FC<{ children?: React.ReactNode }> = ({ children }) => {
@@ -26,7 +29,7 @@ export const PublicWebsite: React.FC<{ children?: React.ReactNode }> = ({ childr
     selectedCategoryId,
     categories,
     subcategories,
-    marketRates,
+    publishedRates,
     publicListings,
     navigatePublic,
     addToast,
@@ -67,7 +70,11 @@ export const PublicWebsite: React.FC<{ children?: React.ReactNode }> = ({ childr
     return true;
   });
 
-  const filteredRates = marketRates.filter((r) => {
+  const approvedRates = publishedRates
+    .filter((r) => r.published)
+    .sort((a, b) => a.categoryName.localeCompare(b.categoryName));
+
+  const filteredRates = approvedRates.filter((r) => {
     if (rateBoardCategory !== 'ALL' && r.categoryId !== rateBoardCategory) return false;
     if (rateBoardFy !== 'ALL' && r.financialYear !== rateBoardFy) return false;
     return true;
@@ -98,7 +105,7 @@ export const PublicWebsite: React.FC<{ children?: React.ReactNode }> = ({ childr
       sections: [
         {
           heading: '1. Information Collected',
-          body: 'Nyanvi Ecoclean Private Limited collects corporate identity, GSTIN, CIN, EPR registration numbers, authorized representative emails (via Google Sign-In for Buyers and Sellers), mobile numbers, and transaction documentation stored securely in Cloud Firestore and Firebase Storage.',
+          body: 'Nyanvi Ecoclean Private Limited collects corporate identity, GSTIN, CIN, EPR registration numbers, authorized representative emails (via Google Sign-In for Buyers and Sellers), mobile numbers, and transaction documentation stored securely with encrypted document storage and strict access controls.',
         },
         {
           heading: '2. Counterparty Anonymity',
@@ -178,13 +185,19 @@ export const PublicWebsite: React.FC<{ children?: React.ReactNode }> = ({ childr
     },
   };
 
-  const getRateForCategory = (catId: string) => marketRates.find((r) => r.categoryId === catId);
+  const getPublishedRateForCategory = (catId: string) =>
+    approvedRates.find((r) => r.categoryId === catId && r.financialYear === 'FY 2025-26') ||
+    approvedRates.find((r) => r.categoryId === catId);
 
   return (
     <div className="min-h-screen flex flex-col bg-[#F4F7FB]">
-      {/* Strict 3-Zone Top Bar */}
+      {/* Header with Admin-Published EPR Rate Ticker & 3-Zone Top Bar */}
       <header className="sticky top-0 z-40 bg-white border-b border-[#E2E8F0]">
-        <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-8">
+        <EprRateTickerBar
+          rates={publishedRates}
+          onRateClick={(rate) => navigatePublic('category-details', rate.categoryId)}
+        />
+        <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between gap-8">
           <LogoMark onClick={() => navigatePublic('home')} />
 
           <nav className="hidden lg:flex items-center gap-7 text-sm font-medium text-[#475569]">
@@ -253,7 +266,7 @@ export const PublicWebsite: React.FC<{ children?: React.ReactNode }> = ({ childr
       {(connectionError || permissionError) && (
         <div className="max-w-[1440px] w-full mx-auto px-4 sm:px-6 lg:px-8 pt-4">
           <ErrorAlertBanner
-            title={connectionError ? 'Firebase Configuration / Connection Error' : 'Data Retrieval Error'}
+            title={connectionError ? 'Service Connection Notice' : 'Data Retrieval Notice'}
             message={connectionError || permissionError || ''}
           />
         </div>
@@ -312,26 +325,25 @@ export const PublicWebsite: React.FC<{ children?: React.ReactNode }> = ({ childr
                     </div>
                   </div>
 
-                  {/* Live Firestore Market Depth Snapshot */}
+                  {/* Official Published EPR Reference Rates Snapshot */}
                   <div className="lg:col-span-6">
-                    <div className="h-full bg-[#0A172A] text-white rounded-lg border border-[#1E3A8A]/40 p-5 flex flex-col justify-between shadow-sm">
+                    <div className="h-full bg-[#0A172A] text-white rounded-lg border border-[#1E3A8A]/40 p-5 sm:p-6 flex flex-col justify-between shadow-sm">
                       <div className="flex flex-wrap items-center justify-between gap-2 pb-4 border-b border-white/10">
                         <div>
                           <div className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[#94A3B8]">
-                            Live Cloud Firestore Feed
+                            Official Desk Schedule
                           </div>
                           <div className="text-sm font-semibold text-white mt-0.5">
-                            Ask Quotes vs. Actual Completed Trade Rates
+                            Published EPR Reference Rates
                           </div>
                         </div>
                       </div>
 
-                      {marketRates.length === 0 ? (
+                      {approvedRates.length === 0 ? (
                         <div className="my-10 text-center space-y-2">
-                          <div className="text-sm font-semibold text-white">No live market rates published yet</div>
+                          <div className="text-sm font-semibold text-white">No reference rates published yet</div>
                           <p className="text-xs text-[#94A3B8] max-w-sm mx-auto">
-                            Asking rates and last traded figures appear here automatically once verified seller listings and
-                            completed orders are recorded in Firestore.
+                            Approved category reference rates appear here automatically once published by EPR Bazaar.
                           </p>
                         </div>
                       ) : (
@@ -340,41 +352,52 @@ export const PublicWebsite: React.FC<{ children?: React.ReactNode }> = ({ childr
                             <thead>
                               <tr className="text-[10px] uppercase tracking-[0.06em] text-[#94A3B8] border-b border-white/10">
                                 <th className="py-2 pr-2 font-semibold">Category</th>
-                                <th className="py-2 px-2 font-semibold text-right">Lowest Ask</th>
-                                <th className="py-2 px-2 font-semibold text-right">Indicative</th>
-                                <th className="py-2 px-2 font-semibold text-right">Last Traded</th>
-                                <th className="py-2 pl-2 font-semibold text-right">Avail. Qty</th>
+                                <th className="py-2 px-2 font-semibold">FY</th>
+                                <th className="py-2 px-2 font-semibold text-right">Published Rate</th>
+                                <th className="py-2 pl-2 font-semibold text-right">Trend</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-white/10 text-xs font-mono tabular-nums">
-                              {marketRates.slice(0, 6).map((rate) => (
-                                <tr
-                                  key={rate.id}
-                                  onClick={() => navigatePublic('category-details', rate.categoryId)}
-                                  className="hover:bg-white/5 cursor-pointer transition-colors"
-                                >
-                                  <td className="py-2.5 pr-2 font-sans font-medium text-white">{rate.categoryName}</td>
-                                  <td className="py-2.5 px-2 text-right text-[#CBD5E1]">
-                                    {rate.lowestAskingRate !== undefined ? formatINR(rate.lowestAskingRate) : '—'}
-                                  </td>
-                                  <td className="py-2.5 px-2 text-right text-[#93C5FD]">
-                                    {rate.indicativeRate !== undefined ? formatINR(rate.indicativeRate) : '—'}
-                                  </td>
-                                  <td className="py-2.5 px-2 text-right font-semibold text-[#4ADE80]">
-                                    {rate.lastTradedRate !== undefined ? formatINR(rate.lastTradedRate) : 'No Trades'}
-                                  </td>
-                                  <td className="py-2.5 pl-2 text-right text-[#CBD5E1]">
-                                    {rate.availableQty.toLocaleString('en-IN')} {rate.unit}
-                                  </td>
-                                </tr>
-                              ))}
+                              {approvedRates.slice(0, 6).map((rate) => {
+                                const TrendIcon =
+                                  rate.trend === 'Up'
+                                    ? ArrowUpRight
+                                    : rate.trend === 'Down'
+                                    ? ArrowDownRight
+                                    : Minus;
+                                const trendColor =
+                                  rate.trend === 'Up'
+                                    ? 'text-[#4ADE80]'
+                                    : rate.trend === 'Down'
+                                    ? 'text-[#FDA4AF]'
+                                    : 'text-[#CBD5E1]';
+                                return (
+                                  <tr
+                                    key={rate.id}
+                                    onClick={() => navigatePublic('category-details', rate.categoryId)}
+                                    className="hover:bg-white/5 cursor-pointer transition-colors"
+                                  >
+                                    <td className="py-2.5 pr-2 font-sans font-medium text-white">{rate.categoryName}</td>
+                                    <td className="py-2.5 px-2 text-[#CBD5E1]">{rate.financialYear}</td>
+                                    <td className="py-2.5 px-2 text-right font-semibold text-[#4ADE80]">
+                                      {formatINR(rate.rate)}/{rate.unit}
+                                    </td>
+                                    <td className={`py-2.5 pl-2 text-right ${trendColor}`}>
+                                      <span className="inline-flex items-center justify-end gap-1 font-sans text-[11px]">
+                                        <TrendIcon className="w-3.5 h-3.5" />
+                                        {rate.trend || 'Stable'}
+                                      </span>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
                             </tbody>
                           </table>
                         </div>
                       )}
 
                       <div className="pt-3 border-t border-white/10 flex flex-wrap items-center justify-between gap-2 text-[11px] text-[#94A3B8]">
-                        <span>Asking rates reflect active listings · Last Traded reflects completed orders only</span>
+                        <span>Reference rates updated and approved by EPR Bazaar desk</span>
                         <button
                           type="button"
                           onClick={() => navigatePublic('market-rates')}
@@ -389,36 +412,6 @@ export const PublicWebsite: React.FC<{ children?: React.ReactNode }> = ({ childr
               </div>
             </section>
 
-            {/* Live Market Ticker (Only renders real Firestore rates when present) */}
-            {marketRates.length > 0 && (
-              <section className="bg-[#10233F] text-white border-b border-[#0A172A] overflow-hidden">
-                <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 py-2 flex items-center gap-4">
-                  <span className="font-mono text-[11px] font-semibold px-2 py-0.5 bg-[#16A36A] text-white rounded shrink-0">
-                    LIVE RATES
-                  </span>
-                  <div className="flex-1 overflow-hidden">
-                    <div className="animate-ticker gap-8 items-center text-xs font-mono tabular-nums">
-                      {[...marketRates, ...marketRates].map((r, idx) => (
-                        <div key={`${r.id}-${idx}`} className="flex items-center gap-2.5 whitespace-nowrap">
-                          <span className="font-sans font-semibold text-white">{r.categoryName}</span>
-                          <span className="text-[#94A3B8]">
-                            Ask: {r.lowestAskingRate ? formatINR(r.lowestAskingRate) : '—'}
-                          </span>
-                          <span className="text-[#CBD5E1]">
-                            Qty: {r.availableQty.toLocaleString('en-IN')} {r.unit}
-                          </span>
-                          <span className="text-[#4ADE80] font-semibold">
-                            Traded: {r.lastTradedRate ? formatINR(r.lastTradedRate) : '—'}
-                          </span>
-                          <span className="text-[#64748B]">|</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </section>
-            )}
-
             {/* EPR Category Section */}
             <section className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 py-14">
               <div className="flex flex-wrap items-end justify-between gap-4 mb-8">
@@ -431,21 +424,21 @@ export const PublicWebsite: React.FC<{ children?: React.ReactNode }> = ({ childr
                   </h2>
                 </div>
                 <Button variant="secondary" size="sm" onClick={() => navigatePublic('market-rates')}>
-                  Compare Market Rates
+                  View Rate Board
                 </Button>
               </div>
 
               {categories.length === 0 ? (
                 <EmptyState
                   title="No EPR categories configured yet"
-                  description="An authorised platform administrator can configure EPR trading categories (Plastic Cat I–IV, E-Waste, Battery, Tyre, Used Oil) in the Admin Portal."
-                  actionLabel="Admin Sign-In"
+                  description="Supported EPR trading categories (Plastic Cat I–IV, E-Waste, Battery, Tyre, Used Oil) will appear here once published."
+                  actionLabel="Sign In"
                   onAction={() => navigatePublic('login')}
                 />
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                   {categories.map((cat) => {
-                    const rate = getRateForCategory(cat.id);
+                    const rate = getPublishedRateForCategory(cat.id);
                     return (
                       <button
                         key={cat.id}
@@ -463,17 +456,17 @@ export const PublicWebsite: React.FC<{ children?: React.ReactNode }> = ({ childr
                             {cat.description || 'Managed B2B EPR credit trading category.'}
                           </p>
                         </div>
-                        <div className="mt-4 pt-3 border-t border-[#F1F5F9] grid grid-cols-2 gap-2 text-xs">
+                        <div className="mt-4 pt-3 border-t border-[#F1F5F9] flex items-center justify-between gap-2 text-xs">
                           <div>
-                            <div className="text-[10px] uppercase tracking-wider text-[#64748B]">Lowest Asking</div>
+                            <div className="text-[10px] uppercase tracking-wider text-[#64748B]">Reference Rate</div>
                             <div className="font-mono font-semibold text-[#0A172A] tabular-nums mt-0.5">
-                              {rate?.lowestAskingRate !== undefined ? formatINR(rate.lowestAskingRate) : '—'}
+                              {rate ? `${formatINR(rate.rate)}/${rate.unit}` : 'Upon Enquiry'}
                             </div>
                           </div>
                           <div className="text-right">
-                            <div className="text-[10px] uppercase tracking-wider text-[#64748B]">Last Traded</div>
-                            <div className="font-mono font-semibold text-[#16A36A] tabular-nums mt-0.5">
-                              {rate?.lastTradedRate !== undefined ? formatINR(rate.lastTradedRate) : 'No Trades'}
+                            <div className="text-[10px] uppercase tracking-wider text-[#64748B]">Year</div>
+                            <div className="font-mono font-medium text-[#475569] tabular-nums mt-0.5">
+                              {rate?.financialYear || 'FY 2025-26'}
                             </div>
                           </div>
                         </div>
@@ -752,11 +745,14 @@ export const PublicWebsite: React.FC<{ children?: React.ReactNode }> = ({ childr
             <div className="flex flex-wrap items-end justify-between gap-4">
               <div>
                 <div className="text-xs font-semibold uppercase tracking-[0.06em] text-[#64748B]">
-                  Real-Time Cloud Firestore Rate Discovery
+                  Official Desk Schedule
                 </div>
                 <h1 className="font-display text-2xl sm:text-3xl font-bold text-[#0A172A] mt-1">
-                  Live Market Rate Board
+                  Published EPR Market Rates
                 </h1>
+                <p className="text-xs sm:text-sm text-[#475569] mt-1">
+                  Indicative category-wise EPR credit rates published and updated by the EPR Bazaar trading desk.
+                </p>
               </div>
               <div className="flex flex-wrap gap-3">
                 <select
@@ -782,48 +778,10 @@ export const PublicWebsite: React.FC<{ children?: React.ReactNode }> = ({ childr
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-              <div className="bg-white border border-[#E2E8F0] rounded-lg p-4">
-                <div className="text-[11px] font-semibold uppercase tracking-wider text-[#64748B]">Lowest Seller Asking</div>
-                <div className="mt-1.5 font-mono text-2xl font-bold text-[#0A172A] tabular-nums">
-                  {filteredRates[0]?.lowestAskingRate !== undefined ? formatINR(filteredRates[0].lowestAskingRate) : '—'}
-                </div>
-                <div className="mt-1 text-xs text-[#64748B]">Active seller quote floor</div>
-              </div>
-              <div className="bg-white border border-[#E2E8F0] rounded-lg p-4">
-                <div className="text-[11px] font-semibold uppercase tracking-wider text-[#64748B]">Highest Seller Asking</div>
-                <div className="mt-1.5 font-mono text-2xl font-bold text-[#0A172A] tabular-nums">
-                  {filteredRates[0]?.highestAskingRate !== undefined ? formatINR(filteredRates[0].highestAskingRate) : '—'}
-                </div>
-                <div className="mt-1 text-xs text-[#64748B]">Active seller quote ceiling</div>
-              </div>
-              <div className="bg-[#EFF6FF] border border-[#BFDBFE] rounded-lg p-4">
-                <div className="text-[11px] font-semibold uppercase tracking-wider text-[#1E3A8A]">Indicative Market Rate</div>
-                <div className="mt-1.5 font-mono text-2xl font-bold text-[#1E3A8A] tabular-nums">
-                  {filteredRates[0]?.indicativeRate !== undefined ? formatINR(filteredRates[0].indicativeRate) : '—'}
-                </div>
-                <div className="mt-1 text-xs text-[#3B82F6]">Reference asking midpoint</div>
-              </div>
-              <div className="bg-[#DCFCE7] border border-[#86EFAC] rounded-lg p-4">
-                <div className="text-[11px] font-semibold uppercase tracking-wider text-[#15803D]">Actual Last Traded Rate</div>
-                <div className="mt-1.5 font-mono text-2xl font-bold text-[#15803D] tabular-nums">
-                  {filteredRates[0]?.lastTradedRate !== undefined ? formatINR(filteredRates[0].lastTradedRate) : 'No Trades'}
-                </div>
-                <div className="mt-1 text-xs text-[#15803D]">Completed orders only</div>
-              </div>
-              <div className="bg-white border border-[#E2E8F0] rounded-lg p-4">
-                <div className="text-[11px] font-semibold uppercase tracking-wider text-[#64748B]">Available Listed Qty</div>
-                <div className="mt-1.5 font-mono text-2xl font-bold text-[#0A172A] tabular-nums">
-                  {filteredRates.reduce((s, r) => s + r.availableQty, 0).toLocaleString('en-IN')}
-                </div>
-                <div className="mt-1 text-xs text-[#64748B]">Active verified inventory</div>
-              </div>
-            </div>
-
             {filteredRates.length === 0 ? (
               <EmptyState
-                title="No market rates available"
-                description="Market rate summaries are calculated automatically from approved seller listings and completed transactions."
+                title="No official EPR rates published for this filter"
+                description="Approved category reference rates appear here as soon as they are published by EPR Bazaar."
               />
             ) : (
               <div className="bg-white border border-[#E2E8F0] rounded-lg overflow-hidden">
@@ -831,14 +789,14 @@ export const PublicWebsite: React.FC<{ children?: React.ReactNode }> = ({ childr
                   <table className="w-full text-left border-collapse">
                     <thead>
                       <tr className="bg-[#F8FAFC] border-b border-[#E2E8F0] text-[11px] font-semibold uppercase tracking-[0.06em] text-[#64748B]">
-                        <th className="py-3 px-4">Category</th>
-                        <th className="py-3 px-4">FY</th>
-                        <th className="py-3 px-4 text-right">Lowest Asking</th>
-                        <th className="py-3 px-4 text-right">Highest Asking</th>
-                        <th className="py-3 px-4 text-right text-[#1E3A8A]">Indicative Rate</th>
-                        <th className="py-3 px-4 text-right">Available Qty</th>
-                        <th className="py-3 px-4 text-right text-[#15803D]">Last Traded Rate</th>
+                        <th className="py-3 px-4">EPR Category</th>
+                        <th className="py-3 px-4">Financial Year</th>
+                        <th className="py-3 px-4">Unit</th>
+                        <th className="py-3 px-4 text-right text-[#10233F]">Published Rate</th>
+                        <th className="py-3 px-4">Trend</th>
+                        <th className="py-3 px-4">Desk Notes</th>
                         <th className="py-3 px-4">Last Updated</th>
+                        <th className="py-3 px-4 text-right">Action</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[#F1F5F9] text-sm">
@@ -846,22 +804,22 @@ export const PublicWebsite: React.FC<{ children?: React.ReactNode }> = ({ childr
                         <tr key={r.id} className="hover:bg-[#F8FAFC]">
                           <td className="py-3 px-4 font-semibold text-[#0A172A]">{r.categoryName}</td>
                           <td className="py-3 px-4 font-mono text-xs text-[#475569]">{r.financialYear}</td>
-                          <td className="py-3 px-4 text-right font-mono tabular-nums">
-                            {r.lowestAskingRate !== undefined ? formatINR(r.lowestAskingRate) : '—'}
-                          </td>
-                          <td className="py-3 px-4 text-right font-mono tabular-nums">
-                            {r.highestAskingRate !== undefined ? formatINR(r.highestAskingRate) : '—'}
-                          </td>
-                          <td className="py-3 px-4 text-right font-mono font-semibold text-[#1E3A8A] bg-[#F8FAFF] tabular-nums">
-                            {r.indicativeRate !== undefined ? formatINR(r.indicativeRate) : '—'}
-                          </td>
-                          <td className="py-3 px-4 text-right font-mono tabular-nums">
-                            {r.availableQty.toLocaleString('en-IN')} {r.unit}
-                          </td>
+                          <td className="py-3 px-4 font-mono text-xs text-[#475569]">{r.unit}</td>
                           <td className="py-3 px-4 text-right font-mono font-bold text-[#15803D] bg-[#F0FDF4] tabular-nums">
-                            {r.lastTradedRate !== undefined ? formatINR(r.lastTradedRate) : 'No Trades Yet'}
+                            {formatINR(r.rate)}/{r.unit}
+                          </td>
+                          <td className="py-3 px-4 text-xs font-medium text-[#334155]">
+                            {r.trend || 'Stable'}
+                          </td>
+                          <td className="py-3 px-4 text-xs text-[#64748B] max-w-xs truncate">
+                            {r.notes || 'Official reference quote'}
                           </td>
                           <td className="py-3 px-4 font-mono text-xs text-[#64748B]">{formatTime(r.updatedAt)}</td>
+                          <td className="py-3 px-4 text-right">
+                            <Button variant="secondary" size="sm" onClick={() => navigatePublic('login')}>
+                              Trade Category
+                            </Button>
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -899,31 +857,33 @@ export const PublicWebsite: React.FC<{ children?: React.ReactNode }> = ({ childr
               </div>
 
               {(() => {
-                const r = getRateForCategory(selectedCategory.id);
+                const r = getPublishedRateForCategory(selectedCategory.id);
+                const catLots = publicListings.filter((l) => l.categoryId === selectedCategory.id);
+                const availVol = catLots.reduce((s, l) => s + l.remainingQty, 0);
                 return (
                   <div className="mt-6 grid grid-cols-2 sm:grid-cols-4 gap-4 pt-6 border-t border-[#E2E8F0]">
                     <div>
-                      <div className="text-xs text-[#64748B]">Lowest Asking Rate</div>
+                      <div className="text-xs text-[#64748B]">Published Reference Rate</div>
+                      <div className="font-mono text-xl font-bold text-[#15803D] mt-1">
+                        {r ? `${formatINR(r.rate)}/${r.unit}` : 'Upon Enquiry'}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-[#64748B]">Financial Year</div>
                       <div className="font-mono text-xl font-bold text-[#0A172A] mt-1">
-                        {r?.lowestAskingRate !== undefined ? `${formatINR(r.lowestAskingRate)}/${selectedCategory.unit}` : '—'}
+                        {r?.financialYear || 'FY 2025-26'}
                       </div>
                     </div>
                     <div>
-                      <div className="text-xs text-[#64748B]">Indicative Midpoint</div>
+                      <div className="text-xs text-[#64748B]">Market Trend</div>
                       <div className="font-mono text-xl font-bold text-[#1E3A8A] mt-1">
-                        {r?.indicativeRate !== undefined ? `${formatINR(r.indicativeRate)}/${selectedCategory.unit}` : '—'}
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-[#64748B]">Last Traded Rate</div>
-                      <div className="font-mono text-xl font-bold text-[#16A36A] mt-1">
-                        {r?.lastTradedRate !== undefined ? `${formatINR(r.lastTradedRate)}/${selectedCategory.unit}` : 'No Trades Yet'}
+                        {r?.trend || 'Stable'}
                       </div>
                     </div>
                     <div>
                       <div className="text-xs text-[#64748B]">Available Inventory</div>
                       <div className="font-mono text-xl font-bold text-[#0A172A] mt-1">
-                        {(r?.availableQty ?? 0).toLocaleString('en-IN')} {selectedCategory.unit}
+                        {availVol.toLocaleString('en-IN')} {selectedCategory.unit}
                       </div>
                     </div>
                   </div>
@@ -970,7 +930,7 @@ export const PublicWebsite: React.FC<{ children?: React.ReactNode }> = ({ childr
                   ? 'Buyer Information'
                   : publicPage === 'sell-credits'
                   ? 'Seller Information'
-                  : 'Platform Architecture'}
+                  : 'Trading Process'}
               </div>
               <h1 className="font-display text-3xl font-bold text-[#0A172A] mt-1">
                 {publicPage === 'buy-credits'

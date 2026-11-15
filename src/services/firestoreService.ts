@@ -917,7 +917,7 @@ export async function dispatchCategoryEmailNotificationsApi(
   } catch (err) {
     return {
       ok: false,
-      error: err instanceof Error ? err.message : 'Unable to reach notification backend service.',
+      error: err instanceof Error ? err.message : 'Unable to reach notification delivery service.',
     };
   }
 }
@@ -949,14 +949,82 @@ export async function retryFailedEmailsApi(
     if (!resp.ok) {
       return {
         ok: false,
-        error: data.error || `HTTP ${resp.status}`,
+        error: data.error || `Request error (${resp.status})`,
       };
     }
     return data;
   } catch (err) {
     return {
       ok: false,
-      error: err instanceof Error ? err.message : 'Unable to reach notification retry service.',
+      error: err instanceof Error ? err.message : 'Unable to reach notification delivery service.',
     };
+  }
+}
+
+export async function savePublishedRateDoc(params: {
+  id?: string;
+  categoryId: string;
+  categoryName: string;
+  financialYear: string;
+  unit: 'MT' | 'KL' | 'Units';
+  rate: number;
+  trend?: 'Up' | 'Down' | 'Stable';
+  published: boolean;
+  notes?: string;
+  updatedByUid: string;
+}) {
+  const rateId = params.id || makeId('PRATE');
+  const rateRef = doc(db, 'published_rates', rateId);
+  try {
+    const existingSnap = params.id ? await getDoc(rateRef) : null;
+    const payload = {
+      id: rateId,
+      categoryId: params.categoryId.trim(),
+      categoryName: params.categoryName.trim().slice(0, 100),
+      financialYear: params.financialYear.trim().slice(0, 20),
+      unit: params.unit,
+      rate: Number(params.rate),
+      ...(params.trend ? { trend: params.trend } : {}),
+      published: Boolean(params.published),
+      ...(params.notes?.trim() ? { notes: params.notes.trim().slice(0, 300) } : {}),
+      updatedByUid: params.updatedByUid,
+      updatedAt: serverTimestamp(),
+    };
+    if (existingSnap?.exists()) {
+      await updateDoc(rateRef, payload);
+    } else {
+      await setDoc(rateRef, {
+        ...payload,
+        createdAt: serverTimestamp(),
+      });
+    }
+    return rateId;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, `published_rates/${rateId}`);
+  }
+}
+
+export async function togglePublishedRateStatusDoc(params: {
+  id: string;
+  published: boolean;
+  updatedByUid: string;
+}) {
+  try {
+    await updateDoc(doc(db, 'published_rates', params.id), {
+      published: params.published,
+      updatedByUid: params.updatedByUid,
+      updatedAt: serverTimestamp(),
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, `published_rates/${params.id}`);
+  }
+}
+
+export async function deletePublishedRateDoc(id: string) {
+  const { deleteDoc } = await import('firebase/firestore');
+  try {
+    await deleteDoc(doc(db, 'published_rates', id));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, `published_rates/${id}`);
   }
 }

@@ -421,6 +421,23 @@ service cloud.firestore {
         && data.updatedAt is timestamp;
     }
 
+    function isValidPublishedRate(data) {
+      return data.keys().hasAll(['id', 'categoryId', 'categoryName', 'financialYear', 'unit', 'rate', 'published', 'updatedByUid', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'categoryId', 'categoryName', 'financialYear', 'unit', 'rate', 'trend', 'published', 'notes', 'updatedByUid', 'createdAt', 'updatedAt'])
+        && isValidId(data.id)
+        && isValidId(data.categoryId)
+        && data.categoryName is string && data.categoryName.size() >= 2 && data.categoryName.size() <= 100
+        && data.financialYear is string && data.financialYear.size() >= 4 && data.financialYear.size() <= 20
+        && data.unit in ['MT', 'KL', 'Units']
+        && data.rate is number && data.rate > 0
+        && (!('trend' in data) || data.trend in ['Up', 'Down', 'Stable'])
+        && data.published is bool
+        && (!('notes' in data) || (data.notes is string && data.notes.size() <= 300))
+        && isValidId(data.updatedByUid)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
     // 1. users (strict RBAC: users can only self-register as buyer or seller)
     match /users/{uid} {
       allow get: if isValidId(uid) && isSignedIn() && (uid == request.auth.uid || isStaff());
@@ -791,6 +808,23 @@ service cloud.firestore {
     match /email_delivery_logs/{logId} {
       allow get, list: if isStaff();
       allow create, update, delete: if false;
+    }
+
+    // 24. published_rates (Admin-approved & published EPR category rates for header ticker & public rate board)
+    match /published_rates/{rateId} {
+      allow get: if isValidId(rateId) && (existing().published == true || isAdmin());
+      allow list: if existing().published == true || isAdmin();
+      allow create: if isValidId(rateId) && isAdmin() && isValidPublishedRate(incoming())
+        && incoming().id == rateId
+        && incoming().updatedByUid == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(rateId) && isAdmin() && isValidPublishedRate(incoming())
+        && incoming().id == existing().id
+        && incoming().updatedByUid == request.auth.uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time;
+      allow delete: if isValidId(rateId) && isAdmin();
     }
   }
 }

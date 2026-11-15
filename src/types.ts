@@ -177,6 +177,21 @@ export interface MarketRateRecord {
   updatedAt?: FirestoreTime;
 }
 
+export interface PublishedEprRate {
+  id: string;
+  categoryId: string;
+  categoryName: string;
+  financialYear: string;
+  unit: 'MT' | 'KL' | 'Units';
+  rate: number;
+  trend?: 'Up' | 'Down' | 'Stable';
+  published: boolean;
+  notes?: string;
+  updatedByUid: string;
+  createdAt?: FirestoreTime;
+  updatedAt?: FirestoreTime;
+}
+
 export interface BuyerAccount {
   uid: string;
   companyId: string;
