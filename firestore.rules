@@ -70,7 +70,7 @@ service cloud.firestore {
 
     function isValidBuyer(data) {
       return data.keys().hasAll(['uid', 'companyId', 'companyName', 'contactPerson', 'email', 'mobile', 'gstin', 'eprRegNo', 'verification', 'status', 'createdAt', 'updatedAt'])
-        && data.keys().hasOnly(['uid', 'companyId', 'companyName', 'contactPerson', 'email', 'mobile', 'gstin', 'cin', 'eprRegNo', 'city', 'state', 'verification', 'status', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'companyId', 'companyName', 'contactPerson', 'email', 'mobile', 'gstin', 'cin', 'eprRegNo', 'city', 'state', 'dealingCategories', 'emailNotificationsEnabled', 'verification', 'status', 'createdAt', 'updatedAt'])
         && isValidId(data.uid)
         && isValidId(data.companyId)
         && data.companyName is string && data.companyName.size() >= 2 && data.companyName.size() <= 180
@@ -82,6 +82,8 @@ service cloud.firestore {
         && data.eprRegNo is string && data.eprRegNo.size() <= 64
         && (!('city' in data) || (data.city is string && data.city.size() <= 80))
         && (!('state' in data) || (data.state is string && data.state.size() <= 80))
+        && (!('dealingCategories' in data) || (data.dealingCategories is list && data.dealingCategories.size() <= 30 && (data.dealingCategories.size() == 0 || data.dealingCategories[0] is string)))
+        && (!('emailNotificationsEnabled' in data) || data.emailNotificationsEnabled is bool)
         && data.verification in ['Pending Review', 'Verified', 'Action Required']
         && data.status in ['Active', 'Suspended', 'Pending']
         && data.createdAt is timestamp
@@ -90,7 +92,7 @@ service cloud.firestore {
 
     function isValidSeller(data) {
       return data.keys().hasAll(['uid', 'companyId', 'companyName', 'contactPerson', 'email', 'mobile', 'gstin', 'eprRegNo', 'recyclerType', 'verification', 'status', 'createdAt', 'updatedAt'])
-        && data.keys().hasOnly(['uid', 'companyId', 'companyName', 'contactPerson', 'email', 'mobile', 'gstin', 'cin', 'eprRegNo', 'recyclerType', 'city', 'state', 'verification', 'status', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'companyId', 'companyName', 'contactPerson', 'email', 'mobile', 'gstin', 'cin', 'eprRegNo', 'recyclerType', 'city', 'state', 'dealingCategories', 'emailNotificationsEnabled', 'verification', 'status', 'createdAt', 'updatedAt'])
         && isValidId(data.uid)
         && isValidId(data.companyId)
         && data.companyName is string && data.companyName.size() >= 2 && data.companyName.size() <= 180
@@ -103,6 +105,8 @@ service cloud.firestore {
         && data.recyclerType is string && data.recyclerType.size() <= 120
         && (!('city' in data) || (data.city is string && data.city.size() <= 80))
         && (!('state' in data) || (data.state is string && data.state.size() <= 80))
+        && (!('dealingCategories' in data) || (data.dealingCategories is list && data.dealingCategories.size() <= 30 && (data.dealingCategories.size() == 0 || data.dealingCategories[0] is string)))
+        && (!('emailNotificationsEnabled' in data) || data.emailNotificationsEnabled is bool)
         && data.verification in ['Pending Review', 'Verified', 'Action Required']
         && data.status in ['Active', 'Suspended', 'Pending']
         && data.createdAt is timestamp
@@ -343,14 +347,22 @@ service cloud.firestore {
 
     function isValidNotification(data) {
       return data.keys().hasAll(['id', 'recipientUid', 'targetRole', 'category', 'title', 'message', 'dedupeKey', 'read', 'createdAt'])
-        && data.keys().hasOnly(['id', 'recipientUid', 'targetRole', 'category', 'title', 'message', 'dedupeKey', 'read', 'createdAt'])
+        && data.keys().hasOnly(['id', 'notificationId', 'recipientUid', 'targetRole', 'category', 'title', 'message', 'dedupeKey', 'listingId', 'categoryId', 'categoryName', 'notificationType', 'emailStatus', 'sentAt', 'errorMessage', 'read', 'createdAt'])
         && isValidId(data.id)
+        && (!('notificationId' in data) || isValidId(data.notificationId))
         && isValidId(data.recipientUid)
         && data.targetRole in ['buyer', 'seller', 'facilitator', 'admin']
         && data.category in ['Requirement Updates', 'Listing Updates', 'Matching Notifications', 'Offers', 'Negotiations', 'Orders', 'Payments', 'Documents', 'Account Updates']
         && data.title is string && data.title.size() <= 180
         && data.message is string && data.message.size() <= 800
         && data.dedupeKey is string && data.dedupeKey.size() <= 180
+        && (!('listingId' in data) || (data.listingId is string && data.listingId.size() <= 128))
+        && (!('categoryId' in data) || (data.categoryId is string && data.categoryId.size() <= 64))
+        && (!('categoryName' in data) || (data.categoryName is string && data.categoryName.size() <= 100))
+        && (!('notificationType' in data) || data.notificationType in ['buyer_requirement', 'seller_listing'])
+        && (!('emailStatus' in data) || data.emailStatus in ['pending', 'sent', 'failed'])
+        && (!('sentAt' in data) || data.sentAt is timestamp)
+        && (!('errorMessage' in data) || (data.errorMessage is string && data.errorMessage.size() <= 500))
         && data.read is bool
         && data.createdAt is timestamp;
     }
@@ -465,7 +477,7 @@ service cloud.firestore {
           && incoming().status == existing().status
           && incoming().createdAt == existing().createdAt
           && incoming().updatedAt == request.time
-          && incoming().diff(existing()).affectedKeys().hasOnly(['contactPerson', 'mobile', 'city', 'state', 'updatedAt']))
+          && incoming().diff(existing()).affectedKeys().hasOnly(['contactPerson', 'mobile', 'city', 'state', 'dealingCategories', 'emailNotificationsEnabled', 'updatedAt']))
       );
       allow delete: if false;
     }
@@ -490,7 +502,7 @@ service cloud.firestore {
           && incoming().status == existing().status
           && incoming().createdAt == existing().createdAt
           && incoming().updatedAt == request.time
-          && incoming().diff(existing()).affectedKeys().hasOnly(['contactPerson', 'mobile', 'city', 'state', 'updatedAt']))
+          && incoming().diff(existing()).affectedKeys().hasOnly(['contactPerson', 'mobile', 'city', 'state', 'dealingCategories', 'emailNotificationsEnabled', 'updatedAt']))
       );
       allow delete: if false;
     }
@@ -567,7 +579,10 @@ service cloud.firestore {
         && incoming().sellerUid == request.auth.uid
         && incoming().allocatedQty == 0
         && incoming().remainingQty == incoming().listedQty
-        && incoming().status in ['Draft', 'Pending Approval']
+        && (
+          incoming().status in ['Draft', 'Pending Approval'] ||
+          (incoming().status == 'Active' && get(/databases/$(database)/documents/sellers/$(request.auth.uid)).data.verification == 'Verified')
+        )
         && incoming().createdAt == request.time
         && incoming().updatedAt == request.time
         && exists(/databases/$(database)/documents/categories/$(incoming().categoryId));
@@ -770,6 +785,12 @@ service cloud.firestore {
       allow list: if isAdmin();
       allow create, update: if isValidId(settingId) && isAdmin() && isValidPlatformSettings(incoming()) && incoming().updatedAt == request.time;
       allow delete: if false;
+    }
+
+    // 23. email_delivery_logs (backend Admin SDK writes; strictly staff-only read)
+    match /email_delivery_logs/{logId} {
+      allow get, list: if isStaff();
+      allow create, update, delete: if false;
     }
   }
 }

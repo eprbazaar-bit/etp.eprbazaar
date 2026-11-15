@@ -359,6 +359,63 @@ export const SellerPortal: React.FC = () => {
                   ))
                 )}
               </div>
+
+              <div className="lg:col-span-12 bg-white border border-[#E2E8F0] rounded-lg overflow-hidden">
+                <div className="h-12 px-4 border-b border-[#F1F5F9] flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Bell className="w-4 h-4 text-[#16A36A]" />
+                    <h2 className="font-display text-sm font-semibold text-[#0A172A]">Notification History</h2>
+                    {unreadNotifs > 0 && (
+                      <span className="px-2 py-0.5 rounded bg-[#DCFCE7] text-[#15803D] text-[11px] font-semibold">
+                        {unreadNotifs} unread
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSellerTab('notifications')}
+                    className="text-xs font-semibold text-[#1E3A8A] hover:underline cursor-pointer"
+                  >
+                    Open Notification Centre
+                  </button>
+                </div>
+                {notifications.filter((n) => n.targetRole === 'seller').length === 0 ? (
+                  <div className="p-6 text-center text-xs text-[#64748B]">
+                    No category email or marketplace notifications yet.
+                  </div>
+                ) : (
+                  <div className="divide-y divide-[#F1F5F9]">
+                    {notifications
+                      .filter((n) => n.targetRole === 'seller')
+                      .slice(0, 5)
+                      .map((n) => (
+                        <div
+                          key={n.id}
+                          onClick={() => setSellerTab('notifications')}
+                          className={`px-4 py-3 flex flex-wrap items-center justify-between gap-3 cursor-pointer hover:bg-[#F8FAFC] ${
+                            n.read ? 'bg-white' : 'bg-[#F8FAFF]'
+                          }`}
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="text-xs font-semibold text-[#0A172A] truncate">{n.title}</div>
+                            <div className="text-[11px] text-[#64748B] mt-0.5 flex flex-wrap items-center gap-2">
+                              <span>{n.categoryName || n.category}</span>
+                              {n.listingId && (
+                                <span className="font-mono font-semibold text-[#1E3A8A]">{n.listingId}</span>
+                              )}
+                              <span>·</span>
+                              <span>{formatTime(n.sentAt || n.createdAt)}</span>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {n.emailStatus && <StatusBadge status={n.emailStatus === 'sent' ? 'Sent' : n.emailStatus === 'failed' ? 'Failed' : 'Pending'} />}
+                            <StatusBadge status={n.read ? 'Read' : 'Unread'} />
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -371,7 +428,10 @@ export const SellerPortal: React.FC = () => {
               <CheckCircle2 className="w-12 h-12 text-[#16A36A] mx-auto" />
               <h1 className="font-display text-2xl font-bold text-[#0A172A]">Listing Recorded</h1>
               <p className="text-sm text-[#475569]">
-                Listing <span className="font-mono font-bold text-[#0A172A]">{submittedListingId}</span> has been saved to Firestore. Submitted listings enter Admin approval queue before entering active matching.
+                Listing <span className="font-mono font-bold text-[#0A172A]">{submittedListingId}</span> has been saved to Firestore.{' '}
+                {currentSeller?.verification === 'Verified'
+                  ? 'As a verified seller, your listing is live and matching buyers in this category are being notified.'
+                  : 'Submitted listings enter the Admin approval queue before entering active matching and buyer alerts.'}
               </p>
               <div className="flex justify-center gap-3 pt-2">
                 <Button variant="primary" onClick={() => setSellerTab('my-listings')}>
@@ -1216,7 +1276,17 @@ export const SellerPortal: React.FC = () => {
       )}
       {sellerTab === 'payments' && <PaymentsView />}
       {sellerTab === 'documents' && <DocumentsView ownerFilterRole="seller" />}
-      {sellerTab === 'notifications' && <NotificationsView />}
+      {sellerTab === 'notifications' && (
+        <NotificationsView
+          onViewListing={(n) => {
+            if (n.listingId?.startsWith('LST-')) {
+              setSellerTab('listing-details', n.listingId);
+            } else {
+              setSellerTab('matching-opportunities');
+            }
+          }}
+        />
+      )}
     </PortalShell>
   );
 };

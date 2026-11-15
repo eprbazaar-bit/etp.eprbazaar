@@ -7,6 +7,7 @@ export const AuthScreens: React.FC = () => {
   const {
     publicPage,
     authUser,
+    categories,
     pendingOnboardingRole,
     navigatePublic,
     signInGoogleForRole,
@@ -42,8 +43,17 @@ export const AuthScreens: React.FC = () => {
   const [city, setCity] = useState('');
   const [stateName, setStateName] = useState('');
   const [recyclerType, setRecyclerType] = useState('Plastic Waste Processor (PWP)');
+  const [dealingCategories, setDealingCategories] = useState<string[]>([]);
   const [profileError, setProfileError] = useState('');
   const [savingProfile, setSavingProfile] = useState(false);
+
+  const activeOnboardingCategories = categories.filter((c) => c.active);
+
+  const toggleDealingCategory = (catId: string) => {
+    setDealingCategories((prev) =>
+      prev.includes(catId) ? prev.filter((id) => id !== catId) : [...prev, catId]
+    );
+  };
 
   const handleGoogleSignIn = async (target: 'buyer' | 'seller' | 'admin') => {
     setAuthError('');
@@ -135,6 +145,7 @@ export const AuthScreens: React.FC = () => {
         city,
         state: stateName,
         recyclerType: onboardingRoleChoice === 'seller' ? recyclerType : undefined,
+        dealingCategories,
       });
     } catch (err) {
       setProfileError(err instanceof Error ? err.message : 'Could not save corporate profile.');
@@ -388,6 +399,40 @@ export const AuthScreens: React.FC = () => {
                   <option>Tyre Waste Recycler</option>
                   <option>Used Oil Re-Refiner</option>
                 </select>
+              </div>
+            )}
+
+            {activeOnboardingCategories.length > 0 && (
+              <div>
+                <label className="block text-xs font-semibold text-[#334155] mb-1">
+                  EPR Categories for Automatic Email Alerts (Select all applicable)
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 p-3 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg">
+                  {activeOnboardingCategories.map((cat) => {
+                    const checked = dealingCategories.includes(cat.id);
+                    return (
+                      <label
+                        key={cat.id}
+                        className={`flex items-center gap-2 p-2 rounded border text-xs cursor-pointer ${
+                          checked
+                            ? 'bg-white border-[#10233F] text-[#0A172A] font-semibold'
+                            : 'bg-white/60 border-[#E2E8F0] text-[#475569]'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleDealingCategory(cat.id)}
+                        />
+                        <span>{cat.name}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+                <p className="text-[11px] text-[#64748B] mt-1">
+                  Receive instant category-based email notifications whenever matching{' '}
+                  {onboardingRoleChoice === 'buyer' ? 'selling offers' : 'buying requirements'} are published.
+                </p>
               </div>
             )}
 

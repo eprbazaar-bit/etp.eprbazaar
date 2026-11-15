@@ -1,25 +1,41 @@
-import React, { useState } from 'react';
-import { Check, Download, Eye, FileText, ShieldCheck, Upload } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Check, Download, ExternalLink, Eye, FileText, Mail, ShieldCheck, Upload } from 'lucide-react';
 import { doc, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { useMarketplace } from '../../context/MarketplaceContext';
 import { db, handleFirestoreError, OperationType } from '../../firebase';
 import { Button, EmptyState, formatINR, Modal, StatusBadge } from '../ui/DesignSystem';
-import { BuyerAccount, DocumentRecord, SellerAccount, formatTime } from '../../types';
+import { BuyerAccount, DocumentRecord, NotificationItem, SellerAccount, formatTime } from '../../types';
 
-export const NotificationsView: React.FC = () => {
+export const NotificationsView: React.FC<{
+  onViewListing?: (notif: NotificationItem) => void;
+}> = ({ onViewListing }) => {
   const { role, notifications, markNotificationRead, markAllNotificationsRead } = useMarketplace();
   const [filterCat, setFilterCat] = useState('ALL');
 
-  const roleNotifs = notifications.filter(
-    (n) => (n.targetRole === role || role === 'admin') && (filterCat === 'ALL' || n.category === filterCat)
-  );
+  const roleNotifs = notifications
+    .filter(
+      (n) => (n.targetRole === role || role === 'admin') && (filterCat === 'ALL' || n.category === filterCat)
+    )
+    .sort((a, b) => {
+      const toMs = (t: NotificationItem['createdAt']) => {
+        if (!t) return 0;
+        if (typeof t === 'string') return Date.parse(t) || 0;
+        if (typeof (t as { toDate?: () => Date }).toDate === 'function') {
+          return (t as { toDate: () => Date }).toDate().getTime();
+        }
+        return 0;
+      };
+      return toMs(b.createdAt) - toMs(a.createdAt);
+    });
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="font-display text-xl font-bold text-[#0A172A]">Notification Centre</h1>
-          <p className="text-xs text-[#64748B]">Real-time updates across requirements, listings, matches, offers, and orders.</p>
+          <h1 className="font-display text-xl font-bold text-[#0A172A]">Notification Centre &amp; History</h1>
+          <p className="text-xs text-[#64748B]">
+            Real-time category alerts, email delivery tracking, and updates across requirements, listings, matches, offers, and orders.
+          </p>
         </div>
         <div className="flex items-center gap-2">
           <select
@@ -51,23 +67,57 @@ export const NotificationsView: React.FC = () => {
           {roleNotifs.map((n) => (
             <div
               key={n.id}
-              className={`p-4 flex items-start justify-between gap-4 ${n.read ? 'bg-white' : 'bg-[#F8FAFF]'}`}
+              className={`p-4 flex flex-wrap items-start justify-between gap-4 ${n.read ? 'bg-white' : 'bg-[#F8FAFF]'}`}
             >
-              <div className="space-y-1">
-                <div className="flex items-center gap-2 text-xs text-[#64748B]">
+              <div className="space-y-1.5 min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2 text-xs text-[#64748B]">
                   <span className="font-semibold text-[#10233F]">{n.category}</span>
+                  {n.categoryName && (
+                    <>
+                      <span>·</span>
+                      <span className="font-medium text-[#15803D]">{n.categoryName}</span>
+                    </>
+                  )}
+                  {n.listingId && (
+                    <>
+                      <span>·</span>
+                      <span className="font-mono font-semibold text-[#1E3A8A]">{n.listingId}</span>
+                    </>
+                  )}
                   <span>·</span>
-                  <span>{formatTime(n.createdAt)}</span>
+                  <span>{formatTime(n.sentAt || n.createdAt)}</span>
                   {!n.read && <StatusBadge status="Unread" />}
+                  {n.emailStatus === 'sent' && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-[#DCFCE7] text-[#15803D] text-[11px] font-semibold">
+                      <Mail className="w-3 h-3" /> Email Sent
+                    </span>
+                  )}
+                  {n.emailStatus === 'failed' && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-[#FFE4E6] text-[#BE123C] text-[11px] font-semibold">
+                      <Mail className="w-3 h-3" /> Email Failed
+                    </span>
+                  )}
+                  {n.emailStatus === 'pending' && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-[#FEF3C7] text-[#B45309] text-[11px] font-semibold">
+                      <Mail className="w-3 h-3" /> Email Pending
+                    </span>
+                  )}
                 </div>
                 <div className="text-sm font-semibold text-[#0A172A]">{n.title}</div>
                 <p className="text-xs text-[#475569]">{n.message}</p>
               </div>
-              {!n.read && (
-                <Button variant="ghost" size="sm" onClick={() => void markNotificationRead(n.id)}>
-                  <Check className="w-3.5 h-3.5" /> Mark Read
-                </Button>
-              )}
+              <div className="flex items-center gap-2 shrink-0">
+                {n.listingId && onViewListing && (
+                  <Button variant="secondary" size="sm" onClick={() => onViewListing(n)}>
+                    <ExternalLink className="w-3.5 h-3.5" /> View Listing
+                  </Button>
+                )}
+                {!n.read && (
+                  <Button variant="ghost" size="sm" onClick={() => void markNotificationRead(n.id)}>
+                    <Check className="w-3.5 h-3.5" /> Mark Read
+                  </Button>
+                )}
+              </div>
             </div>
           ))}
         </div>
@@ -348,14 +398,37 @@ export const CompanyProfileView: React.FC<{
   accountType: 'buyer' | 'seller';
   mode: 'profile' | 'verification' | 'settings';
 }> = ({ account, accountType, mode }) => {
-  const { addToast, logout } = useMarketplace();
+  const { categories, addToast, logout } = useMarketplace();
   const [mobile, setMobile] = useState(account?.mobile || '');
   const [contactPerson, setContactPerson] = useState(account?.contactPerson || '');
   const [city, setCity] = useState(account?.city || '');
   const [stateVal, setStateVal] = useState(account?.state || '');
+  const [dealingCategories, setDealingCategories] = useState<string[]>(account?.dealingCategories || []);
+  const [emailNotificationsEnabled, setEmailNotificationsEnabled] = useState<boolean>(
+    account?.emailNotificationsEnabled ?? true
+  );
   const [saving, setSaving] = useState(false);
+  const [savingSettings, setSavingSettings] = useState(false);
   const [notifyOffers, setNotifyOffers] = useState(true);
   const [notifyMatches, setNotifyMatches] = useState(true);
+
+  useEffect(() => {
+    if (!account) return;
+    setMobile(account.mobile || '');
+    setContactPerson(account.contactPerson || '');
+    setCity(account.city || '');
+    setStateVal(account.state || '');
+    setDealingCategories(account.dealingCategories || []);
+    setEmailNotificationsEnabled(account.emailNotificationsEnabled ?? true);
+  }, [account]);
+
+  const activeCategories = categories.filter((c) => c.active);
+
+  const toggleCategory = (catId: string) => {
+    setDealingCategories((prev) =>
+      prev.includes(catId) ? prev.filter((id) => id !== catId) : [...prev, catId]
+    );
+  };
 
   if (!account) {
     return (
@@ -371,7 +444,7 @@ export const CompanyProfileView: React.FC<{
       <div className="bg-white border border-[#E2E8F0] rounded-lg p-6 space-y-5 max-w-3xl">
         <div className="flex items-center justify-between gap-4 border-b border-[#E2E8F0] pb-4">
           <div>
-            <h1 className="font-display text-xl font-bold text-[#0A172A]">Account & Compliance Verification</h1>
+            <h1 className="font-display text-xl font-bold text-[#0A172A]">Account &amp; Compliance Verification</h1>
             <p className="text-xs text-[#64748B] mt-0.5">Corporate KYC and EPR portal registration status</p>
           </div>
           <StatusBadge status={account.verification} />
@@ -398,12 +471,30 @@ export const CompanyProfileView: React.FC<{
     );
   }
 
+  const handleSaveSettings = async () => {
+    setSavingSettings(true);
+    const col = accountType === 'buyer' ? 'buyers' : 'sellers';
+    try {
+      await updateDoc(doc(db, col, account.uid), {
+        dealingCategories: dealingCategories.slice(0, 30),
+        emailNotificationsEnabled,
+        updatedAt: serverTimestamp(),
+      });
+      addToast({ type: 'success', title: 'Email notification preferences saved' });
+    } catch (error) {
+      addToast({ type: 'error', title: 'Failed to save preferences' });
+      handleFirestoreError(error, OperationType.UPDATE, `${col}/${account.uid}`);
+    } finally {
+      setSavingSettings(false);
+    }
+  };
+
   if (mode === 'settings') {
     return (
       <div className="bg-white border border-[#E2E8F0] rounded-lg p-6 space-y-6 max-w-2xl">
         <div>
           <h1 className="font-display text-xl font-bold text-[#0A172A]">Account Settings</h1>
-          <p className="text-xs text-[#64748B]">Security, Google Sign-In link, and notification preferences.</p>
+          <p className="text-xs text-[#64748B]">Security, Google Sign-In link, and category email alert preferences.</p>
         </div>
         <div className="space-y-3 pt-2 border-t border-[#E2E8F0]">
           <div className="text-xs font-semibold uppercase tracking-wider text-[#64748B]">Authentication</div>
@@ -418,20 +509,55 @@ export const CompanyProfileView: React.FC<{
         <div className="space-y-3 pt-2 border-t border-[#E2E8F0]">
           <div className="text-xs font-semibold uppercase tracking-wider text-[#64748B]">Notification Preferences</div>
           <label className="flex items-center justify-between text-sm text-[#334155] cursor-pointer">
+            <span>
+              Enable category-based email notifications for new{' '}
+              {accountType === 'buyer' ? 'selling offers' : 'buying requirements'}
+            </span>
+            <input
+              type="checkbox"
+              checked={emailNotificationsEnabled}
+              onChange={(e) => setEmailNotificationsEnabled(e.target.checked)}
+            />
+          </label>
+          <label className="flex items-center justify-between text-sm text-[#334155] cursor-pointer">
             <span>Receive matching opportunity alerts</span>
             <input type="checkbox" checked={notifyMatches} onChange={(e) => setNotifyMatches(e.target.checked)} />
           </label>
           <label className="flex items-center justify-between text-sm text-[#334155] cursor-pointer">
-            <span>Receive facilitator offer & counteroffer alerts</span>
+            <span>Receive facilitator offer &amp; counteroffer alerts</span>
             <input type="checkbox" checked={notifyOffers} onChange={(e) => setNotifyOffers(e.target.checked)} />
           </label>
         </div>
+
+        {activeCategories.length > 0 && (
+          <div className="space-y-2 pt-2 border-t border-[#E2E8F0]">
+            <div className="text-xs font-semibold uppercase tracking-wider text-[#64748B]">
+              Subscribed EPR Categories ({dealingCategories.length})
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {activeCategories.map((cat) => (
+                <label
+                  key={cat.id}
+                  className="flex items-center gap-2 p-2.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-xs text-[#334155] cursor-pointer"
+                >
+                  <input
+                    type="checkbox"
+                    checked={dealingCategories.includes(cat.id)}
+                    onChange={() => toggleCategory(cat.id)}
+                  />
+                  <span>{cat.name}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="flex items-center justify-between pt-4 border-t border-[#E2E8F0]">
           <Button variant="danger" size="sm" onClick={() => void logout()}>
             Sign Out
           </Button>
-          <Button variant="primary" size="sm" onClick={() => addToast({ type: 'success', title: 'Preferences saved' })}>
-            Save Preferences
+          <Button variant="primary" size="sm" disabled={savingSettings} onClick={() => void handleSaveSettings()}>
+            {savingSettings ? 'Saving...' : 'Save Preferences'}
           </Button>
         </div>
       </div>
@@ -452,9 +578,11 @@ export const CompanyProfileView: React.FC<{
         mobile: cleanedMobile,
         city: city.trim(),
         state: stateVal.trim(),
+        dealingCategories: dealingCategories.slice(0, 30),
+        emailNotificationsEnabled,
         updatedAt: serverTimestamp(),
       });
-      addToast({ type: 'success', title: 'Contact details updated in Firestore' });
+      addToast({ type: 'success', title: 'Company profile & categories updated in Firestore' });
     } catch (error) {
       addToast({ type: 'error', title: 'Failed to update contact details' });
       handleFirestoreError(error, OperationType.UPDATE, `${col}/${account.uid}`);
@@ -522,9 +650,33 @@ export const CompanyProfileView: React.FC<{
           />
         </div>
       </div>
+
+      {activeCategories.length > 0 && (
+        <div className="space-y-2 pt-2 border-t border-[#E2E8F0]">
+          <label className="block text-xs font-semibold text-[#334155]">
+            EPR Categories Dealt In (for two-way email alerts)
+          </label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {activeCategories.map((cat) => (
+              <label
+                key={cat.id}
+                className="flex items-center gap-2 p-2.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-xs text-[#334155] cursor-pointer"
+              >
+                <input
+                  type="checkbox"
+                  checked={dealingCategories.includes(cat.id)}
+                  onChange={() => toggleCategory(cat.id)}
+                />
+                <span>{cat.name}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="flex justify-end">
         <Button variant="primary" size="sm" disabled={saving} onClick={() => void handleSaveContact()}>
-          {saving ? 'Saving...' : 'Update Contact Info'}
+          {saving ? 'Saving...' : 'Update Profile Info'}
         </Button>
       </div>
     </div>

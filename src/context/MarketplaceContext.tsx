@@ -39,6 +39,7 @@ import {
   DocumentRecord,
   EPRCategory,
   EPRSubcategory,
+  EmailDeliveryLog,
   FacilitatorAccount,
   FacilitatorTab,
   InvoiceRecord,
@@ -66,9 +67,11 @@ import {
   createBuyerRequirementDoc,
   createNotificationIfUnique,
   createSellerListingDoc,
+  dispatchCategoryEmailNotificationsApi,
   facilitatorSendOfferDoc,
   recomputeMarketRate,
   respondToOfferDoc,
+  retryFailedEmailsApi,
   runMatchingForListing,
   runMatchingForRequirement,
   saveCategoryWithSubcategories,
@@ -123,6 +126,7 @@ interface MarketplaceContextValue {
   invoices: InvoiceRecord[];
   documents: DocumentRecord[];
   notifications: NotificationItem[];
+  emailDeliveryLogs: EmailDeliveryLog[];
   auditLogs: AuditLogEntry[];
   platformSettings: PlatformSettingsRecord;
   toasts: ToastMessage[];
@@ -144,6 +148,7 @@ interface MarketplaceContextValue {
     city: string;
     state: string;
     recyclerType?: string;
+    dealingCategories?: string[];
   }) => Promise<void>;
   logout: () => Promise<void>;
   addToast: (toast: Omit<ToastMessage, 'id'>) => void;
@@ -239,6 +244,7 @@ interface MarketplaceContextValue {
   ) => Promise<void>;
   markNotificationRead: (id: string) => Promise<void>;
   markAllNotificationsRead: () => Promise<void>;
+  retryFailedEmails: (notificationId?: string) => Promise<void>;
 }
 
 const MarketplaceContext = createContext<MarketplaceContextValue | null>(null);
@@ -261,8 +267,16 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const [userRecord, setUserRecord] = useState<UserRecord | null>(null);
   const [pendingOnboardingRole, setPendingOnboardingRole] = useState<'buyer' | 'seller' | null>(null);
 
+  const initialSearchParams =
+    typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+  const initialPageParam = initialSearchParams?.get('page');
+  const initialListingParam = initialSearchParams?.get('listing') || null;
+
   const [role, setRole] = useState<UserRole>('public');
-  const [publicPage, setPublicPage] = useState<PublicPage>('home');
+  const [publicPage, setPublicPage] = useState<PublicPage>(
+    initialPageParam === 'login' ? 'login' : 'home'
+  );
+  const [pendingListingDeepLink, setPendingListingDeepLink] = useState<string | null>(initialListingParam);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('');
   const [buyerTab, setBuyerTabState] = useState<BuyerTab>('overview');
   const [sellerTab, setSellerTabState] = useState<SellerTab>('overview');
@@ -299,6 +313,7 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const [invoices, setInvoices] = useState<InvoiceRecord[]>([]);
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [emailDeliveryLogs, setEmailDeliveryLogs] = useState<EmailDeliveryLog[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
   const [platformSettings, setPlatformSettings] = useState<PlatformSettingsRecord>(DEFAULT_SETTINGS);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
@@ -685,6 +700,7 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
       unsubs.push(onSnapshot(collection(db, 'invoices'), (s) => setInvoices(s.docs.map((d) => d.data() as InvoiceRecord)), onErr('invoices')));
       unsubs.push(onSnapshot(collection(db, 'documents'), (s) => setDocuments(s.docs.map((d) => d.data() as DocumentRecord)), onErr('documents')));
       unsubs.push(onSnapshot(query(collection(db, 'notifications'), where('recipientUid', '==', uid)), (s) => setNotifications(s.docs.map((d) => d.data() as NotificationItem)), onErr('notifications')));
+      unsubs.push(onSnapshot(collection(db, 'email_delivery_logs'), (s) => setEmailDeliveryLogs(s.docs.map((d) => d.data() as EmailDeliveryLog)), onErr('email_delivery_logs')));
 
       if (role === 'admin') {
         unsubs.push(onSnapshot(collection(db, 'categories'), (s) => setCategories(s.docs.map((d) => d.data() as EPRCategory)), onErr('categories')));
@@ -702,6 +718,35 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
     return () => unsubs.forEach((u) => u());
   }, [firebaseReady, authUser, role]);
+
+  // Handle post-login deep link (?listing=...)
+  useEffect(() => {
+    if (!pendingListingDeepLink || role === 'public') return;
+    const refId = pendingListingDeepLink;
+    if (role === 'buyer') {
+      if (refId.startsWith('REQ-')) {
+        setBuyerTabState('requirement-details');
+        setSelectedRequirementId(refId);
+      } else {
+        setBuyerTabState('notifications');
+      }
+      setPendingListingDeepLink(null);
+    } else if (role === 'seller') {
+      if (refId.startsWith('LST-')) {
+        setSellerTabState('listing-details');
+        setSelectedListingId(refId);
+      } else {
+        setSellerTabState('notifications');
+      }
+      setPendingListingDeepLink(null);
+    } else if (role === 'facilitator') {
+      setFacilitatorTabState(refId.startsWith('REQ-') ? 'buyer-requirements' : 'seller-listings');
+      setPendingListingDeepLink(null);
+    } else if (role === 'admin') {
+      setAdminTab(refId.startsWith('REQ-') ? 'requirement-approval' : 'listing-approval');
+      setPendingListingDeepLink(null);
+    }
+  }, [pendingListingDeepLink, role]);
 
   const signInGoogleForRole = async (targetRole: 'buyer' | 'seller' | 'admin') => {
     if (!auth) throw new Error('Firebase Auth is not initialized.');
@@ -771,6 +816,7 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
     city: string;
     state: string;
     recyclerType?: string;
+    dealingCategories?: string[];
   }) => {
     if (!authUser) throw new Error('Authenticated session required.');
     const chosenRole = pendingOnboardingRole || 'buyer';
@@ -797,6 +843,11 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
     if (auth) await signOut(auth);
     setRole('public');
     setPublicPage('home');
+    setPendingOnboardingRole(null);
+    setBuyers([]);
+    setSellers([]);
+    setFacilitators([]);
+    setAdmins([]);
     setRequirements([]);
     setListings([]);
     setMatches([]);
@@ -807,7 +858,46 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
     setInvoices([]);
     setDocuments([]);
     setNotifications([]);
+    setEmailDeliveryLogs([]);
+    setAuditLogs([]);
     addToast({ type: 'info', title: 'Signed out' });
+  };
+
+  const triggerListingEmailDispatch = async (
+    listingId: string,
+    notificationType: 'buyer_requirement' | 'seller_listing'
+  ) => {
+    if (!authUser) return;
+    try {
+      const idToken = await authUser.getIdToken();
+      const emailRes = await dispatchCategoryEmailNotificationsApi(idToken, listingId, notificationType);
+      if (emailRes.ok) {
+        if ((emailRes.dispatchedCount || 0) > 0) {
+          addToast({
+            type: 'success',
+            title: `Email alerts sent to ${emailRes.dispatchedCount} matched ${
+              notificationType === 'buyer_requirement' ? 'seller(s)' : 'buyer(s)'
+            }`,
+          });
+        } else if ((emailRes.failedCount || 0) > 0) {
+          addToast({
+            type: 'warning',
+            title: `${emailRes.failedCount} email alert(s) failed & logged for retry`,
+            description: emailRes.providerConfigured === false
+              ? 'Email provider credentials are not configured on the backend server yet.'
+              : undefined,
+          });
+        }
+      } else if (emailRes.error) {
+        addToast({
+          type: 'warning',
+          title: 'Email notification dispatch skipped',
+          description: emailRes.error,
+        });
+      }
+    } catch {
+      // Do not block Firestore listing save if notification endpoint is unavailable
+    }
   };
 
   const submitBuyerRequirement = async (
@@ -841,8 +931,11 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
     );
     addToast({
       type: 'success',
-      title: asDraft ? `Draft ${id} saved` : `Requirement ${id} submitted`,
+      title: asDraft ? `Draft ${id} saved` : `Requirement ${id} published`,
     });
+    if (!asDraft) {
+      await triggerListingEmailDispatch(id, 'buyer_requirement');
+    }
     return id;
   };
 
@@ -871,23 +964,35 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
     asDraft = false
   ) => {
     if (!authUser) throw new Error('Authentication required');
-    const id = await createSellerListingDoc({
-      sellerUid: authUser.uid,
-      ...params,
-      asDraft,
-    });
+    const isVerifiedSeller = currentSeller?.verification === 'Verified';
+    const { id, status } = await createSellerListingDoc(
+      {
+        sellerUid: authUser.uid,
+        ...params,
+        asDraft,
+        isVerifiedSeller,
+      },
+      platformSettings.matchingRateTolerancePercent
+    );
     await writeAuditLog(
       authUser.uid,
       authUser.email || '',
       'Seller',
-      asDraft ? 'Saved Listing Draft' : 'Submitted Listing for Approval',
+      asDraft ? 'Saved Listing Draft' : status === 'Active' ? 'Published Active Listing' : 'Submitted Listing for Approval',
       id,
       `${params.listedQty} ${params.category.unit} ${params.category.name}`
     );
     addToast({
       type: 'success',
-      title: asDraft ? `Draft ${id} saved` : `Listing ${id} submitted for Admin approval`,
+      title: asDraft
+        ? `Draft ${id} saved`
+        : status === 'Active'
+          ? `Listing ${id} published live`
+          : `Listing ${id} submitted for Admin approval`,
     });
+    if (!asDraft && status === 'Active') {
+      await triggerListingEmailDispatch(id, 'seller_listing');
+    }
     return id;
   };
 
@@ -1063,6 +1168,7 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
       if (cat) await recomputeMarketRate(cat, listing.financialYear);
       if (decision === 'Active') {
         await runMatchingForListing({ ...listing, status: 'Active' }, platformSettings.matchingRateTolerancePercent);
+        await triggerListingEmailDispatch(listing.id, 'seller_listing');
       }
       await writeAuditLog(
         authUser.uid,
@@ -1087,6 +1193,7 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
       });
       if (decision === 'Active') {
         await runMatchingForRequirement({ ...req, status: 'Active' }, platformSettings.matchingRateTolerancePercent);
+        await triggerListingEmailDispatch(req.id, 'buyer_requirement');
       }
       await writeAuditLog(
         authUser.uid,
@@ -1268,6 +1375,20 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
     addToast({ type: 'info', title: 'All notifications marked read' });
   };
 
+  const retryFailedEmails = async (notificationId?: string) => {
+    if (!authUser) return;
+    const idToken = await authUser.getIdToken();
+    const res = await retryFailedEmailsApi(idToken, notificationId);
+    if (!res.ok) {
+      addToast({ type: 'error', title: 'Retry failed', description: res.error || 'Server error' });
+      return;
+    }
+    addToast({
+      type: (res.sentCount || 0) > 0 ? 'success' : (res.failedCount || 0) > 0 ? 'warning' : 'info',
+      title: `Retried ${res.retriedCount || 0} email(s): ${res.sentCount || 0} sent, ${res.failedCount || 0} failed`,
+    });
+  };
+
   return (
     <MarketplaceContext.Provider
       value={{
@@ -1314,6 +1435,7 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
         invoices,
         documents,
         notifications,
+        emailDeliveryLogs,
         auditLogs,
         platformSettings,
         toasts,
@@ -1350,6 +1472,7 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
         uploadDocumentFile,
         markNotificationRead,
         markAllNotificationsRead,
+        retryFailedEmails,
       }}
     >
       {children}

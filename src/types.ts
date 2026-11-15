@@ -189,6 +189,8 @@ export interface BuyerAccount {
   eprRegNo: string;
   city?: string;
   state?: string;
+  dealingCategories?: string[];
+  emailNotificationsEnabled?: boolean;
   verification: 'Verified' | 'Pending Review' | 'Action Required';
   status: 'Active' | 'Suspended' | 'Pending';
   createdAt?: FirestoreTime;
@@ -208,6 +210,8 @@ export interface SellerAccount {
   recyclerType: string;
   city?: string;
   state?: string;
+  dealingCategories?: string[];
+  emailNotificationsEnabled?: boolean;
   verification: 'Verified' | 'Pending Review' | 'Action Required';
   status: 'Active' | 'Suspended' | 'Pending';
   createdAt?: FirestoreTime;
@@ -462,6 +466,7 @@ export interface DocumentRecord {
 
 export interface NotificationItem {
   id: string;
+  notificationId?: string;
   recipientUid: string;
   targetRole: Exclude<UserRole, 'public'>;
   category:
@@ -477,8 +482,36 @@ export interface NotificationItem {
   title: string;
   message: string;
   dedupeKey: string;
+  listingId?: string;
+  categoryId?: string;
+  categoryName?: string;
+  notificationType?: 'buyer_requirement' | 'seller_listing';
+  emailStatus?: 'pending' | 'sent' | 'failed';
+  sentAt?: FirestoreTime;
+  errorMessage?: string;
   read: boolean;
   createdAt?: FirestoreTime;
+}
+
+export interface EmailDeliveryLog {
+  notificationId: string;
+  listingId: string;
+  recipientUserId: string;
+  recipientEmail: string;
+  recipientRole: 'buyer' | 'seller';
+  categoryId: string;
+  category: string;
+  notificationType: 'buyer_requirement' | 'seller_listing';
+  subject: string;
+  status: 'pending' | 'sent' | 'failed';
+  attemptCount: number;
+  provider: 'resend' | 'sendgrid' | 'smtp' | 'none';
+  providerMessageId?: string;
+  providerResponse?: string;
+  errorMessage?: string;
+  createdAt?: FirestoreTime;
+  sentAt?: FirestoreTime;
+  lastAttemptAt?: FirestoreTime;
 }
 
 export interface AuditLogEntry {

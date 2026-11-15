@@ -364,6 +364,63 @@ export const BuyerPortal: React.FC = () => {
                   ))
                 )}
               </div>
+
+              <div className="lg:col-span-12 bg-white border border-[#E2E8F0] rounded-lg overflow-hidden">
+                <div className="h-12 px-4 border-b border-[#F1F5F9] flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Bell className="w-4 h-4 text-[#1E3A8A]" />
+                    <h2 className="font-display text-sm font-semibold text-[#0A172A]">Notification History</h2>
+                    {unreadNotifs > 0 && (
+                      <span className="px-2 py-0.5 rounded bg-[#DBEAFE] text-[#1E3A8A] text-[11px] font-semibold">
+                        {unreadNotifs} unread
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setBuyerTab('notifications')}
+                    className="text-xs font-semibold text-[#1E3A8A] hover:underline cursor-pointer"
+                  >
+                    Open Notification Centre
+                  </button>
+                </div>
+                {notifications.filter((n) => n.targetRole === 'buyer').length === 0 ? (
+                  <div className="p-6 text-center text-xs text-[#64748B]">
+                    No category email or marketplace notifications yet.
+                  </div>
+                ) : (
+                  <div className="divide-y divide-[#F1F5F9]">
+                    {notifications
+                      .filter((n) => n.targetRole === 'buyer')
+                      .slice(0, 5)
+                      .map((n) => (
+                        <div
+                          key={n.id}
+                          onClick={() => setBuyerTab('notifications')}
+                          className={`px-4 py-3 flex flex-wrap items-center justify-between gap-3 cursor-pointer hover:bg-[#F8FAFC] ${
+                            n.read ? 'bg-white' : 'bg-[#F8FAFF]'
+                          }`}
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="text-xs font-semibold text-[#0A172A] truncate">{n.title}</div>
+                            <div className="text-[11px] text-[#64748B] mt-0.5 flex flex-wrap items-center gap-2">
+                              <span>{n.categoryName || n.category}</span>
+                              {n.listingId && (
+                                <span className="font-mono font-semibold text-[#1E3A8A]">{n.listingId}</span>
+                              )}
+                              <span>·</span>
+                              <span>{formatTime(n.sentAt || n.createdAt)}</span>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {n.emailStatus && <StatusBadge status={n.emailStatus === 'sent' ? 'Sent' : n.emailStatus === 'failed' ? 'Failed' : 'Pending'} />}
+                            <StatusBadge status={n.read ? 'Read' : 'Unread'} />
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -1296,7 +1353,17 @@ export const BuyerPortal: React.FC = () => {
       )}
       {buyerTab === 'payments' && <PaymentsView />}
       {buyerTab === 'documents' && <DocumentsView ownerFilterRole="buyer" />}
-      {buyerTab === 'notifications' && <NotificationsView />}
+      {buyerTab === 'notifications' && (
+        <NotificationsView
+          onViewListing={(n) => {
+            if (n.listingId?.startsWith('REQ-')) {
+              setBuyerTab('requirement-details', n.listingId);
+            } else {
+              setBuyerTab('matching-opportunities');
+            }
+          }}
+        />
+      )}
     </PortalShell>
   );
 };

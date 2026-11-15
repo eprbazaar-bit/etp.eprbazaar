@@ -110,9 +110,19 @@ export async function completeCompanyOnboarding(params: {
   city: string;
   state: string;
   recyclerType?: string;
+  dealingCategories?: string[];
+  emailNotificationsEnabled?: boolean;
 }) {
   const companyId = `CMP-${params.uid.slice(0, 16)}`;
   const batch = writeBatch(db);
+  const cleanDealingCategories = Array.from(
+    new Set(
+      (params.dealingCategories || [])
+        .map((c) => c.trim())
+        .filter(Boolean)
+    )
+  ).slice(0, 30);
+  const emailAlertsEnabled = params.emailNotificationsEnabled ?? true;
 
   batch.set(doc(db, 'companies', companyId), {
     id: companyId,
@@ -139,6 +149,8 @@ export async function completeCompanyOnboarding(params: {
       eprRegNo: params.eprRegNo.trim().slice(0, 64),
       city: params.city.trim().slice(0, 80),
       state: params.state.trim().slice(0, 80),
+      dealingCategories: cleanDealingCategories,
+      emailNotificationsEnabled: emailAlertsEnabled,
       verification: 'Pending Review',
       status: 'Active',
       createdAt: serverTimestamp(),
@@ -158,6 +170,8 @@ export async function completeCompanyOnboarding(params: {
       recyclerType: (params.recyclerType || 'Authorized EPR Recycler').trim().slice(0, 120),
       city: params.city.trim().slice(0, 80),
       state: params.state.trim().slice(0, 80),
+      dealingCategories: cleanDealingCategories,
+      emailNotificationsEnabled: emailAlertsEnabled,
       verification: 'Pending Review',
       status: 'Active',
       createdAt: serverTimestamp(),
@@ -478,39 +492,59 @@ export async function createBuyerRequirementDoc(
   }
 }
 
-export async function createSellerListingDoc(params: {
-  sellerUid: string;
-  category: EPRCategory;
-  subcategory: string;
-  financialYear: string;
-  listedQty: number;
-  askingRate: number;
-  certificateRef?: string;
-  additionalInfo?: string;
-  asDraft?: boolean;
-}): Promise<string> {
+export async function createSellerListingDoc(
+  params: {
+    sellerUid: string;
+    category: EPRCategory;
+    subcategory: string;
+    financialYear: string;
+    listedQty: number;
+    askingRate: number;
+    certificateRef?: string;
+    additionalInfo?: string;
+    asDraft?: boolean;
+    isVerifiedSeller?: boolean;
+  },
+  tolerancePct = 10
+): Promise<{ id: string; status: SellerListing['status'] }> {
   const id = makeId('LST');
-  const status = params.asDraft ? 'Draft' : 'Pending Approval';
+  const status: SellerListing['status'] = params.asDraft
+    ? 'Draft'
+    : params.isVerifiedSeller
+      ? 'Active'
+      : 'Pending Approval';
+  const payload = {
+    id,
+    sellerUid: params.sellerUid,
+    categoryId: params.category.id,
+    categoryName: params.category.name,
+    subcategory: params.subcategory,
+    financialYear: params.financialYear,
+    listedQty: params.listedQty,
+    allocatedQty: 0,
+    remainingQty: params.listedQty,
+    unit: params.category.unit,
+    askingRate: params.askingRate,
+    certificateRef: (params.certificateRef || '').slice(0, 80),
+    additionalInfo: (params.additionalInfo || '').slice(0, 1000),
+    status,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  };
+
   try {
-    await setDoc(doc(db, 'seller_listings', id), {
-      id,
-      sellerUid: params.sellerUid,
-      categoryId: params.category.id,
-      categoryName: params.category.name,
-      subcategory: params.subcategory,
-      financialYear: params.financialYear,
-      listedQty: params.listedQty,
-      allocatedQty: 0,
-      remainingQty: params.listedQty,
-      unit: params.category.unit,
-      askingRate: params.askingRate,
-      certificateRef: (params.certificateRef || '').slice(0, 80),
-      additionalInfo: (params.additionalInfo || '').slice(0, 1000),
-      status,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    });
-    return id;
+    await setDoc(doc(db, 'seller_listings', id), payload);
+    if (status === 'Active') {
+      await runMatchingForListing(
+        {
+          ...payload,
+          createdAt: null,
+          updatedAt: null,
+        } as SellerListing,
+        tolerancePct
+      );
+    }
+    return { id, status };
   } catch (error) {
     handleFirestoreError(error, OperationType.CREATE, `seller_listings/${id}`);
   }
@@ -841,5 +875,88 @@ export async function saveCategoryWithSubcategories(params: {
     return catId;
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, `categories/${catId}`);
+  }
+}
+
+export interface DispatchEmailResult {
+  ok: boolean;
+  listingId?: string;
+  notificationType?: 'buyer_requirement' | 'seller_listing';
+  category?: string;
+  totalMatched?: number;
+  dispatchedCount?: number;
+  failedCount?: number;
+  skippedDuplicateCount?: number;
+  providerConfigured?: boolean;
+  provider?: string;
+  error?: string;
+}
+
+export async function dispatchCategoryEmailNotificationsApi(
+  idToken: string,
+  listingId: string,
+  notificationType: 'buyer_requirement' | 'seller_listing'
+): Promise<DispatchEmailResult> {
+  try {
+    const resp = await fetch('/api/notifications/dispatch', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${idToken}`,
+      },
+      body: JSON.stringify({ listingId, notificationType }),
+    });
+    const data = (await resp.json()) as DispatchEmailResult;
+    if (!resp.ok) {
+      return {
+        ok: false,
+        error: data.error || `HTTP ${resp.status}`,
+      };
+    }
+    return data;
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : 'Unable to reach notification backend service.',
+    };
+  }
+}
+
+export interface RetryEmailResult {
+  ok: boolean;
+  retriedCount?: number;
+  sentCount?: number;
+  failedCount?: number;
+  providerConfigured?: boolean;
+  provider?: string;
+  error?: string;
+}
+
+export async function retryFailedEmailsApi(
+  idToken: string,
+  notificationId?: string
+): Promise<RetryEmailResult> {
+  try {
+    const resp = await fetch('/api/notifications/retry', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${idToken}`,
+      },
+      body: JSON.stringify(notificationId ? { notificationId } : {}),
+    });
+    const data = (await resp.json()) as RetryEmailResult;
+    if (!resp.ok) {
+      return {
+        ok: false,
+        error: data.error || `HTTP ${resp.status}`,
+      };
+    }
+    return data;
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : 'Unable to reach notification retry service.',
+    };
   }
 }

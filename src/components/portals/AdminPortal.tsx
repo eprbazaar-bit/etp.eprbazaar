@@ -14,9 +14,11 @@ import {
   IndianRupee,
   LayoutDashboard,
   Lock,
+  Mail,
   MessageSquare,
   PackageCheck,
   Receipt,
+  RefreshCw,
   Settings,
   Shield,
   Sliders,
@@ -38,7 +40,7 @@ import {
   StatusBadge,
 } from '../ui/DesignSystem';
 import { DocumentsView, NotificationsView, PaymentsView } from './SharedPortalViews';
-import { AdminTab, BuyerRequirement, EPRCategory, SellerListing, formatTime } from '../../types';
+import { AdminTab, BuyerRequirement, EPRCategory, EmailDeliveryLog, SellerListing, formatTime } from '../../types';
 
 export const AdminPortal: React.FC = () => {
   const {
@@ -61,6 +63,7 @@ export const AdminPortal: React.FC = () => {
     payments,
     auditLogs,
     notifications,
+    emailDeliveryLogs,
     platformSettings,
     adminApproveListing,
     adminApproveRequirement,
@@ -70,6 +73,7 @@ export const AdminPortal: React.FC = () => {
     adminCreateStaffRecord,
     adminSavePlatformSettings,
     recordPayment,
+    retryFailedEmails,
     addToast,
   } = useMarketplace();
 
@@ -112,6 +116,8 @@ export const AdminPortal: React.FC = () => {
   const [gstPct, setGstPct] = useState(String(platformSettings.gstPercent));
   const [tolerancePct, setTolerancePct] = useState(String(platformSettings.matchingRateTolerancePercent));
   const [savingSettings, setSavingSettings] = useState(false);
+  const [emailLogFilter, setEmailLogFilter] = useState<'ALL' | 'sent' | 'failed' | 'pending'>('ALL');
+  const [retryingEmails, setRetryingEmails] = useState(false);
 
   useEffect(() => {
     setBrokeragePct(String(platformSettings.defaultBrokeragePercent));
@@ -1415,7 +1421,141 @@ export const AdminPortal: React.FC = () => {
 
       {adminTab === 'payments' && <PaymentsView />}
       {adminTab === 'documents' && <DocumentsView ownerFilterRole="admin" />}
-      {adminTab === 'notifications' && <NotificationsView />}
+      {adminTab === 'notifications' && (
+        <div className="space-y-8">
+          <NotificationsView />
+
+          <div className="space-y-4 pt-4 border-t border-[#E2E8F0]">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="font-display text-lg font-bold text-[#0A172A] flex items-center gap-2">
+                  <Mail className="w-4 h-4 text-[#1E3A8A]" /> Two-Way Email Delivery Logs
+                </h2>
+                <p className="text-xs text-[#64748B]">
+                  Audit trail of category-matched buyer/seller email notifications dispatched by the backend service.
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <select
+                  value={emailLogFilter}
+                  onChange={(e) => setEmailLogFilter(e.target.value as 'ALL' | 'sent' | 'failed' | 'pending')}
+                  className="h-9 px-3 text-xs border border-[#CBD5E1] rounded-lg bg-white"
+                >
+                  <option value="ALL">All Statuses ({emailDeliveryLogs.length})</option>
+                  <option value="sent">Sent ({emailDeliveryLogs.filter((l) => l.status === 'sent').length})</option>
+                  <option value="failed">Failed ({emailDeliveryLogs.filter((l) => l.status === 'failed').length})</option>
+                  <option value="pending">Pending ({emailDeliveryLogs.filter((l) => l.status === 'pending').length})</option>
+                </select>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  disabled={retryingEmails || emailDeliveryLogs.filter((l) => l.status === 'failed').length === 0}
+                  onClick={async () => {
+                    setRetryingEmails(true);
+                    try {
+                      await retryFailedEmails();
+                    } finally {
+                      setRetryingEmails(false);
+                    }
+                  }}
+                >
+                  <RefreshCw className="w-3.5 h-3.5" /> {retryingEmails ? 'Retrying...' : 'Retry All Failed'}
+                </Button>
+              </div>
+            </div>
+
+            {emailDeliveryLogs.length === 0 ? (
+              <EmptyState
+                title="No email delivery logs yet."
+                description="When buyers publish requirements or sellers publish offers, email dispatches will be logged here."
+              />
+            ) : (
+              <div className="bg-white border border-[#E2E8F0] rounded-lg overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-[#F8FAFC] border-b border-[#E2E8F0] text-[11px] font-semibold uppercase tracking-wider text-[#64748B]">
+                        <th className="py-3 px-4">Notification ID</th>
+                        <th className="py-3 px-4">Listing</th>
+                        <th className="py-3 px-4">Direction</th>
+                        <th className="py-3 px-4">Category</th>
+                        <th className="py-3 px-4">Recipient</th>
+                        <th className="py-3 px-4">Provider</th>
+                        <th className="py-3 px-4">Attempts</th>
+                        <th className="py-3 px-4">Status</th>
+                        <th className="py-3 px-4">Timestamp</th>
+                        <th className="py-3 px-4">Details</th>
+                        <th className="py-3 px-4 text-right">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#F1F5F9] text-xs">
+                      {[...emailDeliveryLogs]
+                        .filter((l) => emailLogFilter === 'ALL' || l.status === emailLogFilter)
+                        .sort((a, b) => {
+                          const toMs = (t: EmailDeliveryLog['createdAt']) => {
+                            if (!t) return 0;
+                            if (typeof t === 'string') return Date.parse(t) || 0;
+                            if (typeof (t as { toDate?: () => Date }).toDate === 'function') {
+                              return (t as { toDate: () => Date }).toDate().getTime();
+                            }
+                            return 0;
+                          };
+                          return toMs(b.lastAttemptAt || b.createdAt) - toMs(a.lastAttemptAt || a.createdAt);
+                        })
+                        .map((log) => (
+                          <tr key={log.notificationId} className="hover:bg-[#F8FAFC]">
+                            <td className="py-3 px-4 font-mono font-semibold text-[#0A172A]">{log.notificationId}</td>
+                            <td className="py-3 px-4 font-mono text-[#1E3A8A]">{log.listingId}</td>
+                            <td className="py-3 px-4">
+                              {log.notificationType === 'buyer_requirement' ? 'Buyer → Sellers' : 'Seller → Buyers'}
+                            </td>
+                            <td className="py-3 px-4 font-medium">{log.category}</td>
+                            <td className="py-3 px-4 font-mono">
+                              <span className="uppercase text-[10px] text-[#64748B] mr-1">{log.recipientRole}</span>
+                              {log.recipientEmail}
+                            </td>
+                            <td className="py-3 px-4 font-mono uppercase">{log.provider}</td>
+                            <td className="py-3 px-4 font-mono">{log.attemptCount}</td>
+                            <td className="py-3 px-4">
+                              <StatusBadge
+                                status={log.status === 'sent' ? 'Sent' : log.status === 'failed' ? 'Failed' : 'Pending'}
+                              />
+                            </td>
+                            <td className="py-3 px-4 font-mono text-[#64748B]">
+                              {formatTime(log.sentAt || log.lastAttemptAt || log.createdAt)}
+                            </td>
+                            <td className="py-3 px-4 max-w-[240px] truncate text-[#475569]">
+                              {log.errorMessage || log.providerMessageId || log.providerResponse || '—'}
+                            </td>
+                            <td className="py-3 px-4 text-right">
+                              {log.status === 'failed' && (
+                                <Button
+                                  variant="secondary"
+                                  size="sm"
+                                  disabled={retryingEmails}
+                                  onClick={async () => {
+                                    setRetryingEmails(true);
+                                    try {
+                                      await retryFailedEmails(log.notificationId);
+                                    } finally {
+                                      setRetryingEmails(false);
+                                    }
+                                  }}
+                                >
+                                  Retry
+                                </Button>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       <Modal
         open={staffModalRole !== null}
